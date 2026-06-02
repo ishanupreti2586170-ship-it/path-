@@ -2,5 +2,5 @@
   "name": "Career path ",
   "description": "A career discovery platform that uses psychological profiling and aptitude testing to map your ideal professional path.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

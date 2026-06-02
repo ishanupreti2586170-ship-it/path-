@@ -17,25 +17,36 @@ async function startServer() {
   app.post("/api/gemini", async (req, res) => {
     try {
       const { prompt, language } = req.body;
-      const langInstructions = language && language !== 'English' 
-        ? `\n\nIMPORTANT: Please translate the values in the JSON output into ${language}. The JSON keys MUST remain in English.` 
-        : '';
+      const langInstructions =
+        language && language !== "English"
+          ? `\n\nIMPORTANT: Please translate the values in the JSON output into ${language}. The JSON keys MUST remain in English.`
+          : "";
 
-      const genAI = new GoogleGenAI({ 
-        apiKey: process.env.GEMINI_API_KEY!
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          "GEMINI_API_KEY environment variable is not set. Please configure it in the platform settings.",
+        );
+      }
+
+      const genAI = new GoogleGenAI({
+        apiKey: apiKey,
       });
       const result = await genAI.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt + langInstructions
+        model: "gemini-2.5-flash",
+        contents: prompt + langInstructions,
       });
-      
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text || result.text;
+
+      const text =
+        result.candidates?.[0]?.content?.parts?.[0]?.text || result.text;
       if (!text) throw new Error("Could not extract text from Gemini response");
-      
-      res.json({ result: text.replace(/```json|```/g, '').trim() });
+
+      res.json({ result: text.replace(/```json|```/g, "").trim() });
     } catch (error: any) {
       console.error("Gemini API Error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate content" });
+      res
+        .status(500)
+        .json({ error: error.message || "Failed to generate content" });
     }
   });
 
@@ -47,10 +58,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
