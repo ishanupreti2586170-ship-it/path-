@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI } from "@google/genai";
 import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
@@ -187,24 +186,14 @@ function CareerOracleTool({ language }: { language: string }) {
 
   // Gemini API helper
   const callAI = async (prompt: string) => {
-    const langInstructions = language !== 'English' 
-      ? `\n\nIMPORTANT: Please translate the values in the JSON output into ${language}. The JSON keys MUST remain in English.` 
-      : '';
-      
-    const genAI = new GoogleGenAI({ 
-      apiKey: process.env.GEMINI_API_KEY!,
-      unstable_experimental_httpOptions: {
-        // This SDK requires specific environment configuration sometimes
-      }
-    } as any);
-    const result = await genAI.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt + langInstructions
+    const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, language })
     });
-    // The response structure in this SDK version
-    const text = (result as any).candidates?.[0]?.content?.parts?.[0]?.text || (result as any).text;
-    if (!text) throw new Error("Could not extract text from Gemini response");
-    return text.replace(/```json|```/g, '').trim();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to call AI API");
+    return data.result;
   };
 
   const handleStart = () => {
