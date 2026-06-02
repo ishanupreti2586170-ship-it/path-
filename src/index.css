@@ -23,13 +23,27 @@
   --amber: #e8a84c;
 }
 
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
 body {
   font-family: 'DM Mono', monospace;
   background: var(--void);
   color: var(--star);
   min-height: 100vh;
-  margin: 0;
   overflow-x: hidden;
+  display: grid;
+  place-items: center;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
 }
 
 /* ── typography ── */
