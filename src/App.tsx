@@ -15,6 +15,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { LandingPage } from "./LandingPage";
 
 // ────────────────────────────────────────────────
 // CONSTANTS & DATA
@@ -1599,7 +1600,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative min-h-screen z-10 w-full overflow-hidden flex flex-col items-center">
+    <div className="relative min-h-screen z-10 w-full overflow-x-hidden flex flex-col items-center">
       <Helmet>
         <title>Career Oracle - How to find your career path</title>
         <meta
@@ -1615,7 +1616,8 @@ export default function App() {
 
       <main className="flex-1 w-full flex flex-col items-center z-10 relative">
         <Routes>
-          <Route path="/" element={<CareerOracleTool language={language} />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/app" element={<CareerOracleTool language={language} />} />
           <Route path="/about-us" element={<AboutUs />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
