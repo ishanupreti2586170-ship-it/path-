@@ -1,0 +1,1 @@
+- [Deterministic scoring vs AI generation split](psychometric-ai-split.md) — keep diagnostic scoring/matching pure math; reserve AI calls for open-ended generative steps only.
