@@ -77,17 +77,29 @@ function CareerOracleTool({ language }: { language: string }) {
   const [aptitudeAnswers, setAptitudeAnswers] = useState<Record<string, string>>({});
   const [aptitudeResults, setAptitudeResults] = useState<Record<string, AptitudeResult>>({});
 
+  // Payment is scoped to a single test attempt, not the browser/visitor --
+  // each fresh assessment gets its own testSessionId (created in
+  // handleStart), so unlocking one attempt's report never carries over to a
+  // retake. sessionStorage (not localStorage) matches this per-attempt
+  // lifecycle while still surviving the redirect out to Stripe and back.
   const [unlocked, setUnlocked] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("co_unlocked") === "1",
+    () => typeof window !== "undefined" && sessionStorage.getItem("co_unlocked") === "1",
   );
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [unlockError, setUnlockError] = useState("");
+  const [email, setEmail] = useState(
+    () => (typeof window !== "undefined" && sessionStorage.getItem("co_email")) || "",
+  );
+  const [emailTouched, setEmailTouched] = useState(false);
 
-  const getVisitorId = () => {
-    let id = localStorage.getItem("co_visitor_id");
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = EMAIL_RE.test(email.trim());
+
+  const getTestSessionId = () => {
+    let id = sessionStorage.getItem("co_test_session_id");
     if (!id) {
       id = crypto.randomUUID();
-      localStorage.setItem("co_visitor_id", id);
+      sessionStorage.setItem("co_test_session_id", id);
     }
     return id;
   };
@@ -98,10 +110,10 @@ function CareerOracleTool({ language }: { language: string }) {
     if (params.get("unlocked") === "1" && sessionId) {
       (async () => {
         try {
-          const resp = await fetch(`/api/verify-session?session_id=${encodeURIComponent(sessionId)}&visitorId=${encodeURIComponent(getVisitorId())}`);
+          const resp = await fetch(`/api/verify-session?session_id=${encodeURIComponent(sessionId)}&testSessionId=${encodeURIComponent(getTestSessionId())}`);
           const data = await resp.json();
           if (resp.ok && data.unlocked) {
-            localStorage.setItem("co_unlocked", "1");
+            sessionStorage.setItem("co_unlocked", "1");
             setUnlocked(true);
           } else {
             setUnlockError("We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.");
@@ -115,13 +127,13 @@ function CareerOracleTool({ language }: { language: string }) {
       })();
     } else if (params.get("checkout") === "cancelled") {
       window.history.replaceState({}, "", window.location.pathname);
-    } else if (!unlocked) {
+    } else if (!unlocked && sessionStorage.getItem("co_test_session_id")) {
       (async () => {
         try {
-          const resp = await fetch(`/api/purchase-status?visitorId=${encodeURIComponent(getVisitorId())}`);
+          const resp = await fetch(`/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}`);
           const data = await resp.json();
           if (resp.ok && data.unlocked) {
-            localStorage.setItem("co_unlocked", "1");
+            sessionStorage.setItem("co_unlocked", "1");
             setUnlocked(true);
           }
         } catch (e) {
@@ -138,7 +150,7 @@ function CareerOracleTool({ language }: { language: string }) {
       const resp = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitorId: getVisitorId() }),
+        body: JSON.stringify({ testSessionId: getTestSessionId(), email: email.trim() }),
       });
       const data = await resp.json();
       if (!resp.ok || !data.url) throw new Error(data.error || "Failed to start checkout");
@@ -166,6 +178,19 @@ function CareerOracleTool({ language }: { language: string }) {
   };
 
   const handleStart = () => {
+    if (!isEmailValid) {
+      setEmailTouched(true);
+      return;
+    }
+    // A fresh test attempt always gets its own testSessionId and starts
+    // unlocked=false, so a previous attempt's payment can never carry over
+    // to this one -- enforcing one payment per test attempt.
+    const newSessionId = crypto.randomUUID();
+    sessionStorage.setItem("co_test_session_id", newSessionId);
+    sessionStorage.setItem("co_email", email.trim());
+    sessionStorage.removeItem("co_unlocked");
+    setUnlocked(false);
+    setUnlockError("");
     setScreen("question");
     setStep(0);
   };
@@ -368,7 +393,41 @@ function CareerOracleTool({ language }: { language: string }) {
               <span className="orn-c">✦</span>
               <div className="orn-r" />
             </div>
-            <button className="btn btn-primary mt-8 mb-4" onClick={handleStart}>
+
+            <div className="w-full max-w-xs mx-auto mt-8 text-left">
+              <label
+                htmlFor="co-email"
+                className="text-[9px] tracking-widest text-[var(--gold-d)] uppercase mb-2 block"
+              >
+                Email — for your receipt & report
+              </label>
+              <input
+                id="co-email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setEmailTouched(true)}
+                className={`w-full bg-[rgba(255,255,255,0.04)] border rounded-lg px-4 py-3 text-sm text-[var(--mist)] outline-none transition-colors ${
+                  emailTouched && !isEmailValid
+                    ? "border-red-400/60"
+                    : "border-[rgba(201,168,76,0.25)] focus:border-[var(--gold)]"
+                }`}
+              />
+              {emailTouched && !isEmailValid && (
+                <p className="text-[10px] text-red-400 mt-2">
+                  Enter a valid email to begin — one paid unlock per test attempt is tied to this session.
+                </p>
+              )}
+            </div>
+
+            <button
+              className="btn btn-primary mt-6 mb-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleStart}
+              disabled={emailTouched && !isEmailValid}
+            >
               <span>Begin Your Reading ✦</span>
             </button>
             <Link
@@ -622,19 +681,47 @@ function CareerOracleTool({ language }: { language: string }) {
               <div className="orn-r" />
             </div>
 
-            {Object.keys(aptitudeResults).length >= 2 && (
-              <div className="flex justify-center mb-8">
+            {!unlocked ? (
+              <div className="card mb-10 text-center">
+                <p className="eyebrow mb-2">Your Matches Are Ready</p>
+                <h3 className="display text-2xl mb-4">
+                  Unlock {matches.length} Career Matches
+                </h3>
+                <p className="text-[12px] text-[rgba(240,234,255,0.7)] leading-relaxed max-w-md mx-auto mb-6">
+                  Your trait profile is free to view above. To see which
+                  professions match it, plus your AI Growth Path and a
+                  downloadable PDF report, unlock the full report for a
+                  one-time $4.99 — tied to this test attempt.
+                </p>
+                {unlockError && (
+                  <p className="text-[11px] text-red-400 mb-4">{unlockError}</p>
+                )}
                 <button
-                  className="btn btn-ghost"
-                  onClick={() => setScreen("compare")}
+                  className="btn btn-primary disabled:opacity-50"
+                  onClick={handleUnlock}
+                  disabled={checkoutLoading}
                 >
-                  <span>Compare Tested Careers →</span>
+                  <span>{checkoutLoading ? "Redirecting…" : "Unlock Full Report — $4.99 →"}</span>
                 </button>
+                <p className="text-[9px] tracking-widest text-[var(--mist)] uppercase mt-4">
+                  Receipt sent to {sessionStorage.getItem("co_email") || email}
+                </p>
               </div>
-            )}
+            ) : (
+              <>
+                {Object.keys(aptitudeResults).length >= 2 && (
+                  <div className="flex justify-center mb-8">
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => setScreen("compare")}
+                    >
+                      <span>Compare Tested Careers →</span>
+                    </button>
+                  </div>
+                )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
-              {matches.map((m) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
+                  {matches.map((m) => (
                 <div key={m.occupation.title} className="career-card relative">
                   <div className="flex justify-between items-start mb-4">
                     <span className="text-3xl">{m.occupation.emoji}</span>
@@ -694,8 +781,10 @@ function CareerOracleTool({ language }: { language: string }) {
                     </button>
                   </div>
                 </div>
-              ))}
-            </div>
+                  ))}
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 
