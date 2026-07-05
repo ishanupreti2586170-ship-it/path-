@@ -48,3 +48,4 @@ timeoutMs = 120000
 [userenv.shared]
 CASHFREE_ENV = "production"
 FULL_REPORT_PRICE_INR = "399"
+BYPASS_EMAIL = "joship696@gmail.com"
