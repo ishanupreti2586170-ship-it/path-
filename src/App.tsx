@@ -772,6 +772,9 @@ function CareerOracleTool({ language }: { language: string }) {
               <button className="btn btn-ghost" onClick={() => setScreen("report")}>
                 <span>← Back to Matches</span>
               </button>
+              <button className="btn btn-ghost" onClick={() => setScreen("final")}>
+                <span>See Final Report →</span>
+              </button>
               <button className="btn btn-primary" onClick={() => openGrowthPath(selectedCareer)}>
                 <span>Explore Growth Path (AI) →</span>
               </button>
