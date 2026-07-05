@@ -77,6 +77,79 @@ function CareerOracleTool({ language }: { language: string }) {
   const [aptitudeAnswers, setAptitudeAnswers] = useState<Record<string, string>>({});
   const [aptitudeResults, setAptitudeResults] = useState<Record<string, AptitudeResult>>({});
 
+  const [unlocked, setUnlocked] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("co_unlocked") === "1",
+  );
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [unlockError, setUnlockError] = useState("");
+
+  const getVisitorId = () => {
+    let id = localStorage.getItem("co_visitor_id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("co_visitor_id", id);
+    }
+    return id;
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (params.get("unlocked") === "1" && sessionId) {
+      (async () => {
+        try {
+          const resp = await fetch(`/api/verify-session?session_id=${encodeURIComponent(sessionId)}`);
+          const data = await resp.json();
+          if (resp.ok && data.unlocked) {
+            localStorage.setItem("co_unlocked", "1");
+            setUnlocked(true);
+          } else {
+            setUnlockError("We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.");
+          }
+        } catch (e) {
+          console.error(e);
+          setUnlockError("We couldn't confirm your payment. If you were charged, please contact support.");
+        } finally {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+      })();
+    } else if (params.get("checkout") === "cancelled") {
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (!unlocked) {
+      (async () => {
+        try {
+          const resp = await fetch(`/api/purchase-status?visitorId=${encodeURIComponent(getVisitorId())}`);
+          const data = await resp.json();
+          if (resp.ok && data.unlocked) {
+            localStorage.setItem("co_unlocked", "1");
+            setUnlocked(true);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      })();
+    }
+  }, []);
+
+  const handleUnlock = async () => {
+    setCheckoutLoading(true);
+    setUnlockError("");
+    try {
+      const resp = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitorId: getVisitorId(), origin: window.location.origin }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.url) throw new Error(data.error || "Failed to start checkout");
+      window.location.href = data.url;
+    } catch (e: any) {
+      console.error(e);
+      setUnlockError(e.message || "Failed to start checkout. Please try again.");
+      setCheckoutLoading(false);
+    }
+  };
+
   const currentBlock = ASSESSMENT_BLOCKS[step];
 
   // Gemini API helper — used ONLY for the optional growth-suggestions step,
@@ -138,6 +211,8 @@ function CareerOracleTool({ language }: { language: string }) {
       return;
     }
 
+    if (!unlocked) return;
+
     setGrowth(null);
     if (!profile) return;
     const bf = bigFiveDescriptors(profile.bigFive);
@@ -192,6 +267,11 @@ function CareerOracleTool({ language }: { language: string }) {
   };
 
   const handleDownload = async () => {
+    if (!unlocked) {
+      handleUnlock();
+      return;
+    }
+
     const reportElement = document.getElementById("final-report-content");
     if (!reportElement) return;
 
@@ -935,7 +1015,32 @@ function CareerOracleTool({ language }: { language: string }) {
             </p>
 
             <div className="card w-full">
-              {growthError ? (
+              {!unlocked ? (
+                <div className="text-center py-8">
+                  <p className="text-[10px] tracking-widest text-[var(--gold-d)] uppercase mb-3">
+                    Part of the Full Report
+                  </p>
+                  <p className="text-sm text-[rgba(240,234,255,0.7)] leading-relaxed mb-6 max-w-md mx-auto">
+                    Unlock the AI-curated growth guide — books, topics, and
+                    resources tailored to your profile and this career — plus
+                    the downloadable PDF report. One-time payment, no
+                    subscription.
+                  </p>
+                  {unlockError && (
+                    <p className="text-xs text-[#e87b9a] mb-4">{unlockError}</p>
+                  )}
+                  <button
+                    className="btn btn-primary"
+                    disabled={checkoutLoading}
+                    onClick={handleUnlock}
+                  >
+                    <span>{checkoutLoading ? "Redirecting to checkout..." : "Unlock Full Report — $4.99 →"}</span>
+                  </button>
+                  <p className="text-[9px] text-[var(--mist)] mt-4 uppercase tracking-widest">
+                    Secure checkout via Stripe · Cards & international payments supported
+                  </p>
+                </div>
+              ) : growthError ? (
                 <p className="text-sm text-[rgba(240,234,255,0.6)] leading-relaxed text-center py-6">
                   {growthError}
                 </p>
@@ -1165,8 +1270,17 @@ function CareerOracleTool({ language }: { language: string }) {
             </div>
 
             <div className="flex flex-col items-center gap-6 mt-4">
-              <button className="btn btn-primary" onClick={handleDownload}>
-                <span>Download Report ↓</span>
+              {!unlocked && unlockError && (
+                <p className="text-xs text-[#e87b9a] max-w-md text-center">{unlockError}</p>
+              )}
+              <button className="btn btn-primary" onClick={handleDownload} disabled={checkoutLoading}>
+                <span>
+                  {checkoutLoading
+                    ? "Redirecting to checkout..."
+                    : unlocked
+                      ? "Download Report ↓"
+                      : "Unlock & Download Report — $4.99 →"}
+                </span>
               </button>
               <button
                 className="text-[var(--gold-d)] tracking-[0.3em] uppercase text-[10px] hover:text-[var(--gold)] transition-colors"

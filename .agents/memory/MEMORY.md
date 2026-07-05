@@ -1,2 +1,3 @@
 - [Deterministic scoring vs AI generation split](psychometric-ai-split.md) — keep diagnostic scoring/matching pure math; reserve AI calls for open-ended generative steps only.
 - [Deriving per-occupation weights from existing profile data](occupation-derived-dimension-weights.md) — scale a scored/tagged item bank to many occupations by computing dimension relevance from data already on file, not hand-authored per item.
+- [Stripe replit-sync gotchas](stripe-replit-sync-gotchas.md) — connection field names differ from skill template; syncBackfill() needs explicit `{object:"all"}` or it silently syncs nothing.
