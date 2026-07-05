@@ -30,7 +30,7 @@ import {
   getOccupationDimensions,
   AptitudeResult,
 } from "./lib/aptitude";
-import { AptitudeQuestion } from "./data/aptitudeItems";
+import { AptitudeQuestion, APTITUDE_DIMENSION_LABELS, AptitudeDimension } from "./data/aptitudeItems";
 
 // ────────────────────────────────────────────────
 // CONSTANTS & DATA
@@ -47,6 +47,7 @@ type Screen =
   | "report"
   | "aptitude"
   | "aptitude-result"
+  | "compare"
   | "growth"
   | "final"
   | "about";
@@ -532,6 +533,17 @@ function CareerOracleTool({ language }: { language: string }) {
               <div className="orn-r" />
             </div>
 
+            {Object.keys(aptitudeResults).length >= 2 && (
+              <div className="flex justify-center mb-8">
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setScreen("compare")}
+                >
+                  <span>Compare Tested Careers →</span>
+                </button>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
               {matches.map((m) => (
                 <div key={m.occupation.title} className="career-card relative">
@@ -762,6 +774,131 @@ function CareerOracleTool({ language }: { language: string }) {
               </button>
               <button className="btn btn-primary" onClick={() => openGrowthPath(selectedCareer)}>
                 <span>Explore Growth Path (AI) →</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {screen === "compare" && (
+          <motion.div
+            key="compare"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="pt-10"
+          >
+            <div className="text-center mb-8">
+              <p className="eyebrow mb-2">Adaptability Comparison</p>
+              <h2 className="display text-4xl">
+                Compare <em className="text-[var(--gold-l)]">Tested Careers</em>
+              </h2>
+            </div>
+
+            {(() => {
+              const comparedCareers = matches
+                .filter((m) => aptitudeResults[m.occupation.title])
+                .map((m) => ({
+                  title: m.occupation.title,
+                  emoji: m.occupation.emoji,
+                  result: aptitudeResults[m.occupation.title],
+                }));
+
+              if (comparedCareers.length === 0) {
+                return (
+                  <p className="text-center text-[12px] text-[var(--mist)] py-10">
+                    No tested careers yet — take an aptitude check from the
+                    matches screen first.
+                  </p>
+                );
+              }
+
+              const dimensionsPresent = new Set<AptitudeDimension>();
+              comparedCareers.forEach((c) =>
+                c.result.dimensions.forEach((d) => dimensionsPresent.add(d.dimension)),
+              );
+              const orderedDimensions = (
+                Object.keys(APTITUDE_DIMENSION_LABELS) as AptitudeDimension[]
+              ).filter((d) => dimensionsPresent.has(d));
+
+              return (
+                <>
+                  <div className="card mb-8">
+                    <p className="eyebrow mb-4">Overall Adaptability</p>
+                    <div className="flex flex-col gap-4">
+                      {[...comparedCareers]
+                        .sort((a, b) => b.result.overall - a.result.overall)
+                        .map((c) => (
+                          <div key={c.title}>
+                            <div className="flex justify-between text-[11px] mb-1">
+                              <span className="font-cg">
+                                {c.emoji} {c.title}
+                              </span>
+                              <span className="text-[var(--gold-d)]">{c.result.overall}%</span>
+                            </div>
+                            <div className="progress-track h-[4px] bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-[var(--teal)] to-[var(--gold)]"
+                                style={{ width: `${c.result.overall}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  <div className="card mb-10">
+                    <p className="eyebrow mb-4">Dimension Breakdown</p>
+                    <div className="flex flex-col gap-6">
+                      {orderedDimensions.map((dim) => (
+                        <div key={dim}>
+                          <div className="text-[11px] font-cg mb-2 text-[var(--gold-l)]">
+                            {APTITUDE_DIMENSION_LABELS[dim]}
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {comparedCareers.map((c) => {
+                              const d = c.result.dimensions.find((x) => x.dimension === dim);
+                              if (!d) {
+                                return (
+                                  <div
+                                    key={c.title}
+                                    className="flex justify-between text-[10px] text-[rgba(240,234,255,0.35)]"
+                                  >
+                                    <span>
+                                      {c.emoji} {c.title}
+                                    </span>
+                                    <span>Not tested</span>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div key={c.title}>
+                                  <div className="flex justify-between text-[10px] mb-1 text-[var(--mist)]">
+                                    <span>
+                                      {c.emoji} {c.title}
+                                    </span>
+                                    <span>{d.score}%</span>
+                                  </div>
+                                  <div className="progress-track h-[3px] bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-[var(--violet)] to-[var(--gold)]"
+                                      style={{ width: `${d.score}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="flex justify-center">
+              <button className="btn btn-ghost" onClick={() => setScreen("report")}>
+                <span>← Back to Matches</span>
               </button>
             </div>
           </motion.div>
