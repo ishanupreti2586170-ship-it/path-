@@ -92,17 +92,11 @@ function CareerOracleTool({ language }: { language: string }) {
     () => (typeof window !== "undefined" && sessionStorage.getItem("co_email")) || "",
   );
   const [emailTouched, setEmailTouched] = useState(false);
-  const [phone, setPhone] = useState(
-    () => (typeof window !== "undefined" && sessionStorage.getItem("co_phone")) || "",
-  );
-  const [phoneTouched, setPhoneTouched] = useState(false);
   const [priceInr, setPriceInr] = useState(399);
   const [cashfreeMode, setCashfreeMode] = useState<"sandbox" | "production">("sandbox");
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = EMAIL_RE.test(email.trim());
-  const digitsOnlyPhone = phone.replace(/\D/g, "");
-  const isPhoneValid = digitsOnlyPhone.length === 10;
   const priceLabel = `₹${priceInr}`;
 
   const getTestSessionId = () => {
@@ -137,8 +131,9 @@ function CareerOracleTool({ language }: { language: string }) {
   // "not paid" from the server clears it so a forged flag can't bypass the
   // paywall. A non-ok server response (transient error) leaves state untouched.
   const confirmPurchase = async () => {
+    const savedEmail = (sessionStorage.getItem("co_email") || email).trim();
     const resp = await fetch(
-      `/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}`,
+      `/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}&email=${encodeURIComponent(savedEmail)}`,
     );
     const data = await resp.json();
     if (!resp.ok) return false;
@@ -190,7 +185,6 @@ function CareerOracleTool({ language }: { language: string }) {
         body: JSON.stringify({
           testSessionId: getTestSessionId(),
           email: email.trim(),
-          phone: digitsOnlyPhone,
         }),
       });
       const data = await resp.json();
@@ -233,9 +227,8 @@ function CareerOracleTool({ language }: { language: string }) {
   };
 
   const handleStart = () => {
-    if (!isEmailValid || !isPhoneValid) {
+    if (!isEmailValid) {
       setEmailTouched(true);
-      setPhoneTouched(true);
       return;
     }
     // A fresh test attempt always gets its own testSessionId and starts
@@ -244,7 +237,6 @@ function CareerOracleTool({ language }: { language: string }) {
     const newSessionId = crypto.randomUUID();
     sessionStorage.setItem("co_test_session_id", newSessionId);
     sessionStorage.setItem("co_email", email.trim());
-    sessionStorage.setItem("co_phone", digitsOnlyPhone);
     sessionStorage.removeItem("co_unlocked");
     setUnlocked(false);
     setUnlockError("");
@@ -478,39 +470,12 @@ function CareerOracleTool({ language }: { language: string }) {
                   Enter a valid email to begin — one paid unlock per test attempt is tied to this session.
                 </p>
               )}
-
-              <label
-                htmlFor="co-phone"
-                className="text-[9px] tracking-widest text-[var(--gold-d)] uppercase mb-2 mt-5 block"
-              >
-                Mobile number — for your payment
-              </label>
-              <input
-                id="co-phone"
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel"
-                placeholder="10-digit mobile number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onBlur={() => setPhoneTouched(true)}
-                className={`w-full bg-[rgba(255,255,255,0.04)] border rounded-lg px-4 py-3 text-sm text-[var(--mist)] outline-none transition-colors ${
-                  phoneTouched && !isPhoneValid
-                    ? "border-red-400/60"
-                    : "border-[rgba(201,168,76,0.25)] focus:border-[var(--gold)]"
-                }`}
-              />
-              {phoneTouched && !isPhoneValid && (
-                <p className="text-[10px] text-red-400 mt-2">
-                  Enter a valid 10-digit mobile number to begin.
-                </p>
-              )}
             </div>
 
             <button
               className="btn btn-primary mt-6 mb-4 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={handleStart}
-              disabled={(emailTouched && !isEmailValid) || (phoneTouched && !isPhoneValid)}
+              disabled={emailTouched && !isEmailValid}
             >
               <span>Begin Your Reading ✦</span>
             </button>

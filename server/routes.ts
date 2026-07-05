@@ -8,7 +8,22 @@ import {
 const router: IRouter = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_RE = /^[0-9]{10}$/;
+
+// Cashfree requires a customer_phone on every order, but we no longer collect
+// one from users. A fixed placeholder satisfies the API without asking for it.
+const PLACEHOLDER_PHONE = "9999999999";
+
+// A single "secret" email that unlocks the full report without paying (useful
+// while the Cashfree domain whitelisting/approval is pending, or for the owner).
+// Configured via BYPASS_EMAIL so the value stays server-side. Comma-separated
+// is supported in case more than one address is ever needed.
+function isBypassEmail(email: string): boolean {
+  const configured = (process.env.BYPASS_EMAIL || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return configured.length > 0 && configured.includes(email.trim().toLowerCase());
+}
 
 // Expose the current payment config the frontend needs: the price to show and
 // which Cashfree mode ("sandbox" | "production") the checkout SDK must load.
@@ -23,24 +38,24 @@ router.get("/payment-config", (_req, res) => {
 // No accounts in this app -- testSessionId is a fresh id generated client-side
 // each time someone starts the assessment, and we use it as the Cashfree
 // order_id so payment is tied to that one attempt (retaking the test generates
-// a new testSessionId, hence a new order and a new payment). Email + phone are
-// collected up front and required by Cashfree.
+// a new testSessionId, hence a new order and a new payment). Only the email is
+// collected up front; Cashfree gets a placeholder phone.
 //
 // This MUST run server-side: creating an order uses the secret key, which must
 // never be exposed to the browser.
 router.post("/checkout", async (req, res) => {
   try {
-    const { testSessionId, email, phone } = req.body || {};
+    const { testSessionId, email } = req.body || {};
     if (!testSessionId || typeof testSessionId !== "string") {
       return res.status(400).json({ error: "testSessionId is required" });
     }
     if (!email || typeof email !== "string" || !EMAIL_RE.test(email)) {
       return res.status(400).json({ error: "A valid email is required" });
     }
-    const normalizedPhone =
-      typeof phone === "string" ? phone.replace(/\D/g, "").slice(-10) : "";
-    if (!PHONE_RE.test(normalizedPhone)) {
-      return res.status(400).json({ error: "A valid 10-digit phone number is required" });
+
+    // Secret email unlocks without going through Cashfree at all.
+    if (isBypassEmail(email)) {
+      return res.json({ alreadyPaid: true });
     }
 
     const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
@@ -76,7 +91,7 @@ router.post("/checkout", async (req, res) => {
       customer_details: {
         customer_id: testSessionId,
         customer_email: email,
-        customer_phone: normalizedPhone,
+        customer_phone: PLACEHOLDER_PHONE,
       },
       order_meta: {
         // Cashfree substitutes {order_id} and redirects the browser here after
@@ -107,6 +122,11 @@ router.get("/purchase-status", async (req, res) => {
     const testSessionId = req.query.testSessionId;
     if (!testSessionId || typeof testSessionId !== "string") {
       return res.status(400).json({ error: "testSessionId is required" });
+    }
+    const email = typeof req.query.email === "string" ? req.query.email : "";
+    // Secret email stays unlocked across reloads without any Cashfree order.
+    if (isBypassEmail(email)) {
+      return res.json({ unlocked: true });
     }
     const cashfree = getCashfreeClient();
     const response = await cashfree.PGFetchOrder(testSessionId);
