@@ -46,5 +46,5 @@ timeoutMs = 120000
 [userenv]
 
 [userenv.shared]
-CASHFREE_ENV = "sandbox"
+CASHFREE_ENV = "production"
 FULL_REPORT_PRICE_INR = "399"

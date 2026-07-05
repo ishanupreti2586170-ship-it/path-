@@ -47,6 +47,28 @@ router.post("/checkout", async (req, res) => {
     const baseUrl = domain ? `https://${domain}` : `${req.protocol}://${req.get("host")}`;
 
     const cashfree = getCashfreeClient();
+
+    // A given attempt may already have an order (e.g. the user abandoned the
+    // Cashfree page and clicked unlock again). order_id must be unique, so we
+    // reuse the existing order instead of failing on a duplicate.
+    try {
+      const existing = await cashfree.PGFetchOrder(testSessionId);
+      const status = existing.data?.order_status;
+      if (status === "PAID") {
+        return res.json({ alreadyPaid: true, orderId: testSessionId });
+      }
+      const existingSession = existing.data?.payment_session_id;
+      if (status === "ACTIVE" && existingSession) {
+        return res.json({ paymentSessionId: existingSession, orderId: testSessionId });
+      }
+    } catch (fetchErr: any) {
+      // 404 = no order yet for this attempt; anything else we let the create
+      // attempt below surface a meaningful error.
+      if (fetchErr?.response?.status && fetchErr.response.status !== 404) {
+        throw fetchErr;
+      }
+    }
+
     const response = await cashfree.PGCreateOrder({
       order_id: testSessionId,
       order_amount: getFullReportPriceINR(),

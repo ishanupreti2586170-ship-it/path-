@@ -131,44 +131,53 @@ function CareerOracleTool({ language }: { language: string }) {
     })();
   }, []);
 
+  // The server (Cashfree order status) is the ONLY source of truth for whether
+  // a report is unlocked. co_unlocked in sessionStorage is just a UX cache to
+  // avoid a flash on reload -- it is never trusted on its own, and a definitive
+  // "not paid" from the server clears it so a forged flag can't bypass the
+  // paywall. A non-ok server response (transient error) leaves state untouched.
   const confirmPurchase = async () => {
     const resp = await fetch(
       `/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}`,
     );
     const data = await resp.json();
-    if (resp.ok && data.unlocked) {
+    if (!resp.ok) return false;
+    if (data.unlocked) {
       sessionStorage.setItem("co_unlocked", "1");
       setUnlocked(true);
       return true;
     }
+    sessionStorage.removeItem("co_unlocked");
+    setUnlocked(false);
     return false;
   };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const isReturn = params.get("cashfree") === "1";
     // Cashfree redirects the browser back here (return_url) after a payment
-    // attempt. order_id === our per-attempt testSessionId.
-    if (params.get("cashfree") === "1") {
-      (async () => {
-        try {
-          const ok = await confirmPurchase();
-          if (!ok) {
-            setUnlockError(
-              "We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.",
-            );
-          }
-        } catch (e) {
-          console.error(e);
+    // attempt. order_id === our per-attempt testSessionId. On every load we
+    // verify against the server so a stale/forged co_unlocked can't unlock.
+    if (!sessionStorage.getItem("co_test_session_id")) return;
+    (async () => {
+      try {
+        const ok = await confirmPurchase();
+        if (isReturn && !ok) {
+          setUnlockError(
+            "We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.",
+          );
+        }
+      } catch (e) {
+        console.error(e);
+        if (isReturn) {
           setUnlockError(
             "We couldn't confirm your payment. If you were charged, please contact support.",
           );
-        } finally {
-          window.history.replaceState({}, "", window.location.pathname);
         }
-      })();
-    } else if (!unlocked && sessionStorage.getItem("co_test_session_id")) {
-      confirmPurchase().catch((e) => console.error(e));
-    }
+      } finally {
+        if (isReturn) window.history.replaceState({}, "", window.location.pathname);
+      }
+    })();
   }, []);
 
   const handleUnlock = async () => {
@@ -185,8 +194,16 @@ function CareerOracleTool({ language }: { language: string }) {
         }),
       });
       const data = await resp.json();
-      if (!resp.ok || !data.paymentSessionId)
-        throw new Error(data.error || "Failed to start checkout");
+      if (!resp.ok) throw new Error(data.error || "Failed to start checkout");
+
+      // This attempt was already paid for -- just unlock, no need to redirect.
+      if (data.alreadyPaid) {
+        sessionStorage.setItem("co_unlocked", "1");
+        setUnlocked(true);
+        setCheckoutLoading(false);
+        return;
+      }
+      if (!data.paymentSessionId) throw new Error("Failed to start checkout");
 
       const cashfree = await load({ mode: cashfreeMode });
       cashfree.checkout({
