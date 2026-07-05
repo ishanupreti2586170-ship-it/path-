@@ -98,7 +98,7 @@ function CareerOracleTool({ language }: { language: string }) {
     if (params.get("unlocked") === "1" && sessionId) {
       (async () => {
         try {
-          const resp = await fetch(`/api/verify-session?session_id=${encodeURIComponent(sessionId)}`);
+          const resp = await fetch(`/api/verify-session?session_id=${encodeURIComponent(sessionId)}&visitorId=${encodeURIComponent(getVisitorId())}`);
           const data = await resp.json();
           if (resp.ok && data.unlocked) {
             localStorage.setItem("co_unlocked", "1");
@@ -138,7 +138,7 @@ function CareerOracleTool({ language }: { language: string }) {
       const resp = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitorId: getVisitorId(), origin: window.location.origin }),
+        body: JSON.stringify({ visitorId: getVisitorId() }),
       });
       const data = await resp.json();
       if (!resp.ok || !data.url) throw new Error(data.error || "Failed to start checkout");

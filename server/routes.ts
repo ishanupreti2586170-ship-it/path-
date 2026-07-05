@@ -10,7 +10,7 @@ const router: IRouter = Router();
 // look up payment status later from the Stripe-synced checkout_sessions table.
 router.post("/checkout", async (req, res) => {
   try {
-    const { visitorId, origin } = req.body || {};
+    const { visitorId } = req.body || {};
     if (!visitorId || typeof visitorId !== "string") {
       return res.status(400).json({ error: "visitorId is required" });
     }
@@ -23,7 +23,11 @@ router.post("/checkout", async (req, res) => {
       });
     }
 
-    const baseUrl = origin || `${req.protocol}://${req.get("host")}`;
+    // Derive the base URL from trusted server-side request info only --
+    // never trust a client-supplied origin/redirect target here, since that
+    // would allow an open redirect through Stripe's success/cancel URLs.
+    const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
+    const baseUrl = domain ? `https://${domain}` : `${req.protocol}://${req.get("host")}`;
     const stripe = await getUncachableStripeClient();
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -42,19 +46,26 @@ router.post("/checkout", async (req, res) => {
 
 // Verify a specific checkout session immediately after redirect back from
 // Stripe -- reads live from the Stripe API since the webhook sync may not
-// have landed yet.
+// have landed yet. Requires the caller's own visitorId and enforces that it
+// matches the session's client_reference_id, so a paid session ID belonging
+// to someone else cannot be replayed to unlock this visitor's browser.
 router.get("/verify-session", async (req, res) => {
   try {
     const sessionId = req.query.session_id;
+    const visitorId = req.query.visitorId;
     if (!sessionId || typeof sessionId !== "string") {
       return res.status(400).json({ error: "session_id is required" });
     }
+    if (!visitorId || typeof visitorId !== "string") {
+      return res.status(400).json({ error: "visitorId is required" });
+    }
     const stripe = await getUncachableStripeClient();
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    res.json({
-      unlocked: session.payment_status === "paid",
-      visitorId: session.client_reference_id,
-    });
+
+    const ownsSession = session.client_reference_id === visitorId;
+    const unlocked = ownsSession && session.payment_status === "paid";
+
+    res.json({ unlocked });
   } catch (error: any) {
     console.error("Verify session error:", error);
     res.status(500).json({ error: error.message || "Failed to verify session" });
