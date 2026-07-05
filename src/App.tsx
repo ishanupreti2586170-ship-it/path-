@@ -69,6 +69,7 @@ function CareerOracleTool({ language }: { language: string }) {
   const [selectedCareer, setSelectedCareer] = useState<CareerMatch | null>(null);
   const [growth, setGrowth] = useState<GrowthSuggestions | null>(null);
   const [growthError, setGrowthError] = useState("");
+  const [growthCache, setGrowthCache] = useState<Record<string, GrowthSuggestions>>({});
   const [loadingStatus, setLoadingStatus] = useState("");
 
   const [aptitudeQuestions, setAptitudeQuestions] = useState<AptitudeQuestion[]>([]);
@@ -127,10 +128,17 @@ function CareerOracleTool({ language }: { language: string }) {
 
   const openGrowthPath = async (match: CareerMatch) => {
     setSelectedCareer(match);
-    setGrowth(null);
     setGrowthError("");
     setScreen("growth");
 
+    const cacheKey = `${language}:${match.occupation.title}`;
+    const cached = growthCache[cacheKey];
+    if (cached) {
+      setGrowth(cached);
+      return;
+    }
+
+    setGrowth(null);
     if (!profile) return;
     const bf = bigFiveDescriptors(profile.bigFive);
     const cg = cognitiveDescriptors(profile.cognitive);
@@ -152,6 +160,7 @@ function CareerOracleTool({ language }: { language: string }) {
       const resp = await callAI(prompt);
       const data = JSON.parse(resp);
       setGrowth(data);
+      setGrowthCache((prev) => ({ ...prev, [cacheKey]: data }));
     } catch (e) {
       console.error(e);
       setGrowthError(
@@ -1171,6 +1180,7 @@ function CareerOracleTool({ language }: { language: string }) {
                   setSelectedCareer(null);
                   setGrowth(null);
                   setGrowthError("");
+                  setGrowthCache({});
                   setAptitudeQuestions([]);
                   setAptitudeAnswers({});
                   setAptitudeStep(0);
