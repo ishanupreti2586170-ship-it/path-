@@ -24,6 +24,13 @@ import {
   TraitProfile,
 } from "./lib/scoring";
 import { matchCareers, CareerMatch } from "./lib/matching";
+import {
+  buildAptitudeTest,
+  scoreAptitudeTest,
+  getOccupationDimensions,
+  AptitudeResult,
+} from "./lib/aptitude";
+import { AptitudeQuestion } from "./data/aptitudeItems";
 
 // ────────────────────────────────────────────────
 // CONSTANTS & DATA
@@ -38,6 +45,8 @@ type Screen =
   | "question"
   | "analyzing"
   | "report"
+  | "aptitude"
+  | "aptitude-result"
   | "growth"
   | "final"
   | "about";
@@ -60,6 +69,11 @@ function CareerOracleTool({ language }: { language: string }) {
   const [growth, setGrowth] = useState<GrowthSuggestions | null>(null);
   const [growthError, setGrowthError] = useState("");
   const [loadingStatus, setLoadingStatus] = useState("");
+
+  const [aptitudeQuestions, setAptitudeQuestions] = useState<AptitudeQuestion[]>([]);
+  const [aptitudeStep, setAptitudeStep] = useState(0);
+  const [aptitudeAnswers, setAptitudeAnswers] = useState<Record<string, string>>({});
+  const [aptitudeResults, setAptitudeResults] = useState<Record<string, AptitudeResult>>({});
 
   const currentBlock = ASSESSMENT_BLOCKS[step];
 
@@ -142,6 +156,28 @@ function CareerOracleTool({ language }: { language: string }) {
       setGrowthError(
         "Growth suggestions need an AI connection to generate and couldn't load right now. Your deterministic match results above are unaffected.",
       );
+    }
+  };
+
+  const startAptitudeTest = (match: CareerMatch) => {
+    setSelectedCareer(match);
+    setAptitudeQuestions(buildAptitudeTest(match.occupation));
+    setAptitudeAnswers({});
+    setAptitudeStep(0);
+    setScreen("aptitude");
+  };
+
+  const currentAptitudeQuestion = aptitudeQuestions[aptitudeStep];
+
+  const handleAptitudeNext = () => {
+    if (!selectedCareer) return;
+    if (aptitudeStep < aptitudeQuestions.length - 1) {
+      setAptitudeStep((s) => s + 1);
+    } else {
+      // Deterministic scoring — fixed weights and answer values, no AI involved.
+      const result = scoreAptitudeTest(selectedCareer.occupation, aptitudeQuestions, aptitudeAnswers);
+      setAptitudeResults((prev) => ({ ...prev, [selectedCareer.occupation.title]: result }));
+      setScreen("aptitude-result");
     }
   };
 
@@ -531,14 +567,202 @@ function CareerOracleTool({ language }: { language: string }) {
                     />
                   </div>
 
-                  <button
-                    className="btn btn-ghost w-full"
-                    onClick={() => openGrowthPath(m)}
-                  >
-                    <span>Growth Path →</span>
-                  </button>
+                  {aptitudeResults[m.occupation.title] && (
+                    <div className="flex justify-between items-center text-[10px] text-[var(--gold-l)] mb-3 uppercase tracking-widest">
+                      <span>Current Adaptability</span>
+                      <span>{aptitudeResults[m.occupation.title].overall}%</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
+                    <button
+                      className="btn btn-ghost w-full"
+                      onClick={() => startAptitudeTest(m)}
+                    >
+                      <span>
+                        {aptitudeResults[m.occupation.title]
+                          ? "Retake Aptitude Test →"
+                          : "Test Current Aptitude →"}
+                      </span>
+                    </button>
+                    <button
+                      className="btn btn-ghost w-full"
+                      onClick={() => openGrowthPath(m)}
+                    >
+                      <span>Growth Path →</span>
+                    </button>
+                  </div>
                 </div>
               ))}
+            </div>
+          </motion.div>
+        )}
+
+        {screen === "aptitude" && currentAptitudeQuestion && selectedCareer && (
+          <motion.div
+            key="aptitude"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="pt-10"
+          >
+            <div className="text-center mb-8">
+              <p className="eyebrow mb-2">Profession Aptitude Check</p>
+              <h2 className="display text-3xl">
+                {selectedCareer.occupation.emoji} {selectedCareer.occupation.title}
+              </h2>
+            </div>
+
+            <div className="progress-wrap mb-8">
+              <div className="progress-meta flex justify-between mb-2">
+                <span className="progress-section text-[9px] tracking-widest text-[var(--gold-d)] uppercase">
+                  Situational Judgment
+                </span>
+                <span className="progress-count text-xs text-[var(--mist)]">
+                  {aptitudeStep + 1} / {aptitudeQuestions.length}
+                </span>
+              </div>
+              <div className="progress-track h-[2px] bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                <motion.div
+                  className="progress-fill h-full bg-gradient-to-r from-[var(--violet)] to-[var(--gold)]"
+                  animate={{ width: `${(aptitudeStep / aptitudeQuestions.length) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="card">
+              <p className="q-text text-xl font-light leading-snug mb-6 font-cg">
+                {currentAptitudeQuestion.scenario}
+              </p>
+              <div className="opts flex flex-col gap-2">
+                {currentAptitudeQuestion.opts.map((o) => (
+                  <div
+                    key={o.v}
+                    className={`opt ${aptitudeAnswers[currentAptitudeQuestion.id] === o.v ? "selected" : ""}`}
+                    onClick={() =>
+                      setAptitudeAnswers({
+                        ...aptitudeAnswers,
+                        [currentAptitudeQuestion.id]: o.v,
+                      })
+                    }
+                  >
+                    <div className="opt-dot" />
+                    <div>
+                      <div className="opt-lbl font-cg text-base">{o.l}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="btn-row flex justify-between mt-10">
+              <button
+                className="btn btn-ghost"
+                onClick={() =>
+                  aptitudeStep > 0 ? setAptitudeStep((s) => s - 1) : setScreen("report")
+                }
+              >
+                <span>← Back</span>
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={aptitudeAnswers[currentAptitudeQuestion.id] === undefined}
+                onClick={handleAptitudeNext}
+              >
+                <span>
+                  {aptitudeStep === aptitudeQuestions.length - 1
+                    ? "See My Adaptability"
+                    : "Continue →"}
+                </span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {screen === "aptitude-result" && selectedCareer && aptitudeResults[selectedCareer.occupation.title] && (
+          <motion.div
+            key="aptitude-result"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pt-10"
+          >
+            <div className="text-center mb-8">
+              <p className="eyebrow mb-2">Current Adaptability</p>
+              <h2 className="display text-4xl">
+                {selectedCareer.occupation.emoji}{" "}
+                <em className="text-[var(--gold-l)]">{selectedCareer.occupation.title}</em>
+              </h2>
+            </div>
+
+            <div className="glass mb-8 px-5 py-4">
+              <p className="text-[11px] text-[rgba(240,234,255,0.65)] leading-relaxed">
+                <span className="text-[var(--gold-l)]">A present-time reading, not a verdict:</span>{" "}
+                this reflects how ready your current skills and working style
+                are for this role today. It shifts with practice and
+                learning — it isn't a fixed ceiling.
+              </p>
+            </div>
+
+            <div className="card text-center mb-8 py-8">
+              <div className="readiness-num text-5xl font-cg text-[var(--gold-l)] mb-2">
+                {aptitudeResults[selectedCareer.occupation.title].overall}%
+              </div>
+              <div className="readiness-label text-[9px] tracking-widest text-[var(--gold-d)] font-sans uppercase">
+                Current Adaptability Score
+              </div>
+            </div>
+
+            <div className="card mb-8">
+              <p className="eyebrow mb-4">Dimension Breakdown</p>
+              <div className="flex flex-col gap-4">
+                {aptitudeResults[selectedCareer.occupation.title].dimensions.map((d) => (
+                  <div key={d.dimension}>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span className="font-cg">{d.label}</span>
+                      <span className="text-[var(--gold-d)]">{d.score}%</span>
+                    </div>
+                    <div className="progress-track h-[4px] bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-[var(--teal)] to-[var(--gold)]"
+                        style={{ width: `${d.score}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-[var(--mist)] mt-1">{d.hint}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card mb-10">
+              <p className="eyebrow mb-4">What This Suggests</p>
+              {aptitudeResults[selectedCareer.occupation.title].strengths.length > 0 && (
+                <p className="text-[12px] text-[rgba(240,234,255,0.75)] leading-relaxed mb-3">
+                  <span className="text-[var(--gold-l)]">Current strengths: </span>
+                  {aptitudeResults[selectedCareer.occupation.title].strengths.join(", ")}.
+                </p>
+              )}
+              {aptitudeResults[selectedCareer.occupation.title].gaps.length > 0 ? (
+                <p className="text-[12px] text-[rgba(240,234,255,0.75)] leading-relaxed">
+                  <span className="text-[var(--gold-l)]">Room to grow right now: </span>
+                  {aptitudeResults[selectedCareer.occupation.title].gaps.join(", ")}
+                  {" "}— these are learnable, not fixed limits.
+                </p>
+              ) : (
+                <p className="text-[12px] text-[rgba(240,234,255,0.75)] leading-relaxed">
+                  No clear gaps showed up in this reading — a strong present-day
+                  fit across the dimensions this role tends to demand.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button className="btn btn-ghost" onClick={() => setScreen("report")}>
+                <span>← Back to Matches</span>
+              </button>
+              <button className="btn btn-primary" onClick={() => openGrowthPath(selectedCareer)}>
+                <span>Explore Growth Path (AI) →</span>
+              </button>
             </div>
           </motion.div>
         )}
@@ -715,6 +939,46 @@ function CareerOracleTool({ language }: { language: string }) {
                 </p>
               </div>
 
+              {selectedCareer && aptitudeResults[selectedCareer.occupation.title] && (
+                <>
+                  <div className="orn w-full my-8">
+                    <div className="orn-l" />
+                    <span className="orn-c">CURRENT ADAPTABILITY</span>
+                    <div className="orn-r" />
+                  </div>
+
+                  <div className="card mb-10">
+                    <div className="flex justify-between items-baseline mb-6">
+                      <p className="eyebrow">Adaptability for This Role Today</p>
+                      <span className="text-3xl font-cg text-[var(--gold-l)]">
+                        {aptitudeResults[selectedCareer.occupation.title].overall}%
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-4 mb-4">
+                      {aptitudeResults[selectedCareer.occupation.title].dimensions.map((d) => (
+                        <div key={d.dimension}>
+                          <div className="flex justify-between text-[11px] mb-1">
+                            <span className="font-cg">{d.label}</span>
+                            <span className="text-[var(--gold-d)]">{d.score}%</span>
+                          </div>
+                          <div className="progress-track h-[4px] bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[var(--teal)] to-[var(--gold)]"
+                              style={{ width: `${d.score}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-[var(--mist)] mt-4 italic">
+                      Deterministically scored from your situational-judgment
+                      answers for this specific profession — not AI-generated.
+                      This is a present-time reading, not a fixed ceiling.
+                    </p>
+                  </div>
+                </>
+              )}
+
               {growth && (
                 <>
                   <div className="orn w-full my-8">
@@ -767,6 +1031,10 @@ function CareerOracleTool({ language }: { language: string }) {
                   setSelectedCareer(null);
                   setGrowth(null);
                   setGrowthError("");
+                  setAptitudeQuestions([]);
+                  setAptitudeAnswers({});
+                  setAptitudeStep(0);
+                  setAptitudeResults({});
                 }}
               >
                 ⟵ Start a New Reading
