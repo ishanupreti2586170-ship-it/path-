@@ -64,4 +64,49 @@ export const OCCUPATIONS: Occupation[] = [
   { title: "Frontend Developer", emoji: "🖥️", category: "Technology", riasec: { R: 45, I: 75, A: 55, S: 25, E: 25, C: 55 }, bigFive: { O: 70, C: 65, E: 40, A: 45, Es: 55 }, risk: 40, style: 60, skills: ["Visual-technical balance", "Attention to detail", "Iteration"] },
   { title: "Backend Developer", emoji: "🗄️", category: "Technology", riasec: { R: 55, I: 90, A: 20, S: 15, E: 20, C: 65 }, bigFive: { O: 65, C: 75, E: 30, A: 40, Es: 60 }, risk: 35, style: 45, skills: ["Systems reasoning", "Precision", "Structured problem-solving"] },
   { title: "Data Analyst", emoji: "📐", category: "Technology", riasec: { R: 20, I: 80, A: 20, S: 25, E: 30, C: 70 }, bigFive: { O: 60, C: 75, E: 35, A: 45, Es: 55 }, risk: 30, style: 40, skills: ["Numerical reasoning", "Attention to detail", "Clear reporting"] },
+
+  // Skilled trades — high hands-on/Realistic, previously thin in the dataset.
+  { title: "Electrician", emoji: "🔌", category: "Skilled Trades", riasec: { R: 85, I: 40, A: 15, S: 20, E: 20, C: 55 }, bigFive: { O: 40, C: 70, E: 35, A: 40, Es: 60 }, risk: 35, style: 30, skills: ["Hands-on precision", "Systematic troubleshooting", "Safety discipline"] },
+  { title: "Plumber", emoji: "🔧", category: "Skilled Trades", riasec: { R: 85, I: 30, A: 10, S: 25, E: 20, C: 50 }, bigFive: { O: 35, C: 65, E: 35, A: 45, Es: 60 }, risk: 30, style: 25, skills: ["Mechanical problem-solving", "Physical stamina", "Client service"] },
+  { title: "Automotive Mechanic", emoji: "🚗", category: "Skilled Trades", riasec: { R: 90, I: 45, A: 15, S: 15, E: 15, C: 45 }, bigFive: { O: 40, C: 65, E: 30, A: 40, Es: 60 }, risk: 30, style: 35, skills: ["Diagnostic reasoning", "Manual dexterity", "Systematic repair process"] },
+  { title: "Carpenter", emoji: "🪚", category: "Skilled Trades", riasec: { R: 85, I: 25, A: 40, S: 20, E: 20, C: 40 }, bigFive: { O: 50, C: 65, E: 30, A: 40, Es: 55 }, risk: 30, style: 45, skills: ["Craftsmanship", "Spatial measurement", "Practical creativity"] },
+
+  // Engineering — technical + Realistic, distinct from software-only Technology cluster.
+  { title: "Civil Engineer", emoji: "🏗️", category: "Engineering", riasec: { R: 65, I: 80, A: 25, S: 20, E: 25, C: 65 }, bigFive: { O: 60, C: 75, E: 30, A: 40, Es: 60 }, risk: 30, style: 40, skills: ["Structural reasoning", "Regulatory precision", "Long-horizon project planning"] },
+  { title: "Mechanical Engineer", emoji: "⚙️", category: "Engineering", riasec: { R: 75, I: 80, A: 25, S: 15, E: 20, C: 55 }, bigFive: { O: 65, C: 70, E: 30, A: 35, Es: 55 }, risk: 35, style: 45, skills: ["Applied physics reasoning", "Iterative prototyping", "Systems troubleshooting"] },
+
+  // Legal — largely absent from the prior dataset.
+  { title: "Lawyer / Attorney", emoji: "⚖️", category: "Legal", riasec: { R: 10, I: 70, A: 25, S: 45, E: 75, C: 55 }, bigFive: { O: 60, C: 70, E: 55, A: 35, Es: 65 }, risk: 45, style: 35, skills: ["Argument construction", "Persuasive advocacy", "Rigorous precedent analysis"] },
+  { title: "Paralegal", emoji: "📋", category: "Legal", riasec: { R: 10, I: 55, A: 15, S: 35, E: 35, C: 80 }, bigFive: { O: 45, C: 75, E: 40, A: 45, Es: 55 }, risk: 20, style: 20, skills: ["Document precision", "Procedural discipline", "Research thoroughness"] },
+
+  // Public safety — high-Realistic + high-Social + high emotional stability, missing entirely before.
+  { title: "Police Officer", emoji: "👮", category: "Public Safety", riasec: { R: 70, I: 35, A: 10, S: 55, E: 40, C: 55 }, bigFive: { O: 40, C: 70, E: 50, A: 45, Es: 70 }, risk: 60, style: 30, skills: ["Composure under pressure", "Situational judgment", "Procedural discipline"] },
+  { title: "Firefighter", emoji: "🚒", category: "Public Safety", riasec: { R: 80, I: 30, A: 10, S: 65, E: 30, C: 45 }, bigFive: { O: 40, C: 70, E: 45, A: 55, Es: 75 }, risk: 70, style: 35, skills: ["Physical courage", "Rapid decision-making", "Team coordination"] },
+  { title: "Military Officer", emoji: "🎖️", category: "Public Safety", riasec: { R: 65, I: 45, A: 10, S: 45, E: 65, C: 65 }, bigFive: { O: 40, C: 80, E: 50, A: 40, Es: 75 }, risk: 65, style: 30, skills: ["Discipline under pressure", "Leadership", "Structured execution"] },
+
+  // Science (non-tech) — high-Investigative but distinct from software/data roles.
+  { title: "Biologist / Life Scientist", emoji: "🧬", category: "Science", riasec: { R: 35, I: 90, A: 20, S: 25, E: 15, C: 50 }, bigFive: { O: 75, C: 65, E: 25, A: 40, Es: 55 }, risk: 25, style: 50, skills: ["Rigorous observation", "Hypothesis testing", "Sustained patient inquiry"] },
+  { title: "Chemist", emoji: "🧪", category: "Science", riasec: { R: 40, I: 90, A: 15, S: 15, E: 15, C: 60 }, bigFive: { O: 65, C: 70, E: 25, A: 35, Es: 55 }, risk: 25, style: 40, skills: ["Precise experimentation", "Analytical reasoning", "Safety-conscious process"] },
+  { title: "Environmental Scientist", emoji: "🌍", category: "Science", riasec: { R: 40, I: 80, A: 20, S: 35, E: 20, C: 45 }, bigFive: { O: 70, C: 60, E: 30, A: 50, Es: 55 }, risk: 30, style: 50, skills: ["Field-based analysis", "Systems thinking", "Long-horizon stewardship"] },
+
+  // Agriculture & animal care — largely absent before.
+  { title: "Veterinarian", emoji: "🐾", category: "Agriculture", riasec: { R: 50, I: 75, A: 15, S: 65, E: 20, C: 50 }, bigFive: { O: 55, C: 75, E: 35, A: 65, Es: 60 }, risk: 30, style: 35, skills: ["Clinical judgment", "Compassionate care", "Composure with distressed animals/owners"] },
+  { title: "Farmer / Agricultural Manager", emoji: "🚜", category: "Agriculture", riasec: { R: 80, I: 35, A: 15, S: 25, E: 35, C: 50 }, bigFive: { O: 45, C: 70, E: 35, A: 45, Es: 60 }, risk: 45, style: 35, skills: ["Practical resourcefulness", "Long-cycle planning", "Adaptation to unpredictable conditions"] },
+
+  // Logistics & operations — coordination-heavy, distinct from office-based Business roles.
+  { title: "Airline Pilot", emoji: "✈️", category: "Logistics", riasec: { R: 60, I: 55, A: 10, S: 25, E: 30, C: 70 }, bigFive: { O: 45, C: 80, E: 35, A: 35, Es: 80 }, risk: 50, style: 25, skills: ["Procedural precision", "Composure under high stakes", "Rapid situational assessment"] },
+  { title: "Supply Chain / Logistics Manager", emoji: "📦", category: "Logistics", riasec: { R: 30, I: 50, A: 10, S: 30, E: 55, C: 75 }, bigFive: { O: 45, C: 75, E: 45, A: 40, Es: 55 }, risk: 35, style: 35, skills: ["Operational planning", "Cross-vendor coordination", "Contingency problem-solving"] },
+
+  // Hospitality — people-facing, distinct from healthcare/education Social cluster.
+  { title: "Hotel Manager", emoji: "🏨", category: "Hospitality", riasec: { R: 15, I: 30, A: 25, S: 70, E: 65, C: 50 }, bigFive: { O: 55, C: 60, E: 65, A: 60, Es: 55 }, risk: 40, style: 50, skills: ["Service orchestration", "Guest experience judgment", "Team leadership"] },
+  { title: "Flight Attendant", emoji: "🛫", category: "Hospitality", riasec: { R: 20, I: 15, A: 15, S: 80, E: 45, C: 45 }, bigFive: { O: 45, C: 60, E: 65, A: 65, Es: 65 }, risk: 40, style: 35, skills: ["Composure in confined high-stakes settings", "Service warmth", "Emergency procedure discipline"] },
+
+  // Finance/administrative — high-Conventional roles, underrepresented outside investing-heavy Finance entries.
+  { title: "Accountant", emoji: "🧾", category: "Finance", riasec: { R: 10, I: 45, A: 10, S: 20, E: 25, C: 90 }, bigFive: { O: 35, C: 85, E: 25, A: 40, Es: 55 }, risk: 15, style: 15, skills: ["Numerical precision", "Regulatory compliance", "Methodical reconciliation"] },
+  { title: "Actuary", emoji: "📉", category: "Finance", riasec: { R: 10, I: 80, A: 10, S: 15, E: 15, C: 80 }, bigFive: { O: 50, C: 85, E: 20, A: 35, Es: 55 }, risk: 15, style: 20, skills: ["Probabilistic reasoning", "Rigorous modeling", "Long-horizon risk assessment"] },
+  { title: "Real Estate Agent", emoji: "🏠", category: "Finance", riasec: { R: 20, I: 25, A: 25, S: 50, E: 85, C: 45 }, bigFive: { O: 50, C: 55, E: 70, A: 50, Es: 55 }, risk: 55, style: 55, skills: ["Persuasive negotiation", "Client relationship management", "Market pattern-reading"] },
+
+  // Human/social services — high-Social, distinct from clinical Healthcare cluster.
+  { title: "Human Resources Manager", emoji: "🧑‍💼", category: "Human Resources", riasec: { R: 10, I: 35, A: 20, S: 75, E: 55, C: 55 }, bigFive: { O: 50, C: 65, E: 55, A: 70, Es: 55 }, risk: 35, style: 40, skills: ["Conflict mediation", "Organizational judgment", "Empathetic policy design"] },
+  { title: "Social Worker", emoji: "🤝", category: "Human Resources", riasec: { R: 15, I: 40, A: 20, S: 90, E: 30, C: 40 }, bigFive: { O: 55, C: 60, E: 45, A: 75, Es: 60 }, risk: 30, style: 40, skills: ["Crisis support", "Deep empathy", "Resourceful case management"] },
 ];
