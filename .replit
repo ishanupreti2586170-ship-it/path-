@@ -42,3 +42,9 @@ externalPort = 3000
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
+
+[userenv]
+
+[userenv.shared]
+CASHFREE_ENV = "sandbox"
+FULL_REPORT_PRICE_INR = "399"

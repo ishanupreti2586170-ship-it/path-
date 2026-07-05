@@ -15,6 +15,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { load } from "@cashfreepayments/cashfree-js";
 import { LandingPage } from "./LandingPage";
 import { ASSESSMENT_BLOCKS, LikertBlock, ChoiceBlock } from "./data/assessmentItems";
 import {
@@ -81,7 +82,7 @@ function CareerOracleTool({ language }: { language: string }) {
   // each fresh assessment gets its own testSessionId (created in
   // handleStart), so unlocking one attempt's report never carries over to a
   // retake. sessionStorage (not localStorage) matches this per-attempt
-  // lifecycle while still surviving the redirect out to Stripe and back.
+  // lifecycle while still surviving the redirect out to Cashfree and back.
   const [unlocked, setUnlocked] = useState(
     () => typeof window !== "undefined" && sessionStorage.getItem("co_unlocked") === "1",
   );
@@ -91,9 +92,18 @@ function CareerOracleTool({ language }: { language: string }) {
     () => (typeof window !== "undefined" && sessionStorage.getItem("co_email")) || "",
   );
   const [emailTouched, setEmailTouched] = useState(false);
+  const [phone, setPhone] = useState(
+    () => (typeof window !== "undefined" && sessionStorage.getItem("co_phone")) || "",
+  );
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [priceInr, setPriceInr] = useState(399);
+  const [cashfreeMode, setCashfreeMode] = useState<"sandbox" | "production">("sandbox");
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = EMAIL_RE.test(email.trim());
+  const digitsOnlyPhone = phone.replace(/\D/g, "");
+  const isPhoneValid = digitsOnlyPhone.length === 10;
+  const priceLabel = `₹${priceInr}`;
 
   const getTestSessionId = () => {
     let id = sessionStorage.getItem("co_test_session_id");
@@ -104,42 +114,60 @@ function CareerOracleTool({ language }: { language: string }) {
     return id;
   };
 
+  // Load the current payment config (price + Cashfree mode) from the server so
+  // the price shown and the checkout SDK mode always match the backend.
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await fetch("/api/payment-config");
+        const data = await resp.json();
+        if (resp.ok) {
+          if (typeof data.priceInr === "number") setPriceInr(data.priceInr);
+          if (data.mode === "production" || data.mode === "sandbox") setCashfreeMode(data.mode);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  const confirmPurchase = async () => {
+    const resp = await fetch(
+      `/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}`,
+    );
+    const data = await resp.json();
+    if (resp.ok && data.unlocked) {
+      sessionStorage.setItem("co_unlocked", "1");
+      setUnlocked(true);
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get("session_id");
-    if (params.get("unlocked") === "1" && sessionId) {
+    // Cashfree redirects the browser back here (return_url) after a payment
+    // attempt. order_id === our per-attempt testSessionId.
+    if (params.get("cashfree") === "1") {
       (async () => {
         try {
-          const resp = await fetch(`/api/verify-session?session_id=${encodeURIComponent(sessionId)}&testSessionId=${encodeURIComponent(getTestSessionId())}`);
-          const data = await resp.json();
-          if (resp.ok && data.unlocked) {
-            sessionStorage.setItem("co_unlocked", "1");
-            setUnlocked(true);
-          } else {
-            setUnlockError("We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.");
+          const ok = await confirmPurchase();
+          if (!ok) {
+            setUnlockError(
+              "We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.",
+            );
           }
         } catch (e) {
           console.error(e);
-          setUnlockError("We couldn't confirm your payment. If you were charged, please contact support.");
+          setUnlockError(
+            "We couldn't confirm your payment. If you were charged, please contact support.",
+          );
         } finally {
           window.history.replaceState({}, "", window.location.pathname);
         }
       })();
-    } else if (params.get("checkout") === "cancelled") {
-      window.history.replaceState({}, "", window.location.pathname);
     } else if (!unlocked && sessionStorage.getItem("co_test_session_id")) {
-      (async () => {
-        try {
-          const resp = await fetch(`/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}`);
-          const data = await resp.json();
-          if (resp.ok && data.unlocked) {
-            sessionStorage.setItem("co_unlocked", "1");
-            setUnlocked(true);
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      })();
+      confirmPurchase().catch((e) => console.error(e));
     }
   }, []);
 
@@ -150,11 +178,21 @@ function CareerOracleTool({ language }: { language: string }) {
       const resp = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ testSessionId: getTestSessionId(), email: email.trim() }),
+        body: JSON.stringify({
+          testSessionId: getTestSessionId(),
+          email: email.trim(),
+          phone: digitsOnlyPhone,
+        }),
       });
       const data = await resp.json();
-      if (!resp.ok || !data.url) throw new Error(data.error || "Failed to start checkout");
-      window.location.href = data.url;
+      if (!resp.ok || !data.paymentSessionId)
+        throw new Error(data.error || "Failed to start checkout");
+
+      const cashfree = await load({ mode: cashfreeMode });
+      cashfree.checkout({
+        paymentSessionId: data.paymentSessionId,
+        redirectTarget: "_self",
+      });
     } catch (e: any) {
       console.error(e);
       setUnlockError(e.message || "Failed to start checkout. Please try again.");
@@ -178,8 +216,9 @@ function CareerOracleTool({ language }: { language: string }) {
   };
 
   const handleStart = () => {
-    if (!isEmailValid) {
+    if (!isEmailValid || !isPhoneValid) {
       setEmailTouched(true);
+      setPhoneTouched(true);
       return;
     }
     // A fresh test attempt always gets its own testSessionId and starts
@@ -188,6 +227,7 @@ function CareerOracleTool({ language }: { language: string }) {
     const newSessionId = crypto.randomUUID();
     sessionStorage.setItem("co_test_session_id", newSessionId);
     sessionStorage.setItem("co_email", email.trim());
+    sessionStorage.setItem("co_phone", digitsOnlyPhone);
     sessionStorage.removeItem("co_unlocked");
     setUnlocked(false);
     setUnlockError("");
@@ -421,12 +461,39 @@ function CareerOracleTool({ language }: { language: string }) {
                   Enter a valid email to begin — one paid unlock per test attempt is tied to this session.
                 </p>
               )}
+
+              <label
+                htmlFor="co-phone"
+                className="text-[9px] tracking-widest text-[var(--gold-d)] uppercase mb-2 mt-5 block"
+              >
+                Mobile number — for your payment
+              </label>
+              <input
+                id="co-phone"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="10-digit mobile number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => setPhoneTouched(true)}
+                className={`w-full bg-[rgba(255,255,255,0.04)] border rounded-lg px-4 py-3 text-sm text-[var(--mist)] outline-none transition-colors ${
+                  phoneTouched && !isPhoneValid
+                    ? "border-red-400/60"
+                    : "border-[rgba(201,168,76,0.25)] focus:border-[var(--gold)]"
+                }`}
+              />
+              {phoneTouched && !isPhoneValid && (
+                <p className="text-[10px] text-red-400 mt-2">
+                  Enter a valid 10-digit mobile number to begin.
+                </p>
+              )}
             </div>
 
             <button
               className="btn btn-primary mt-6 mb-4 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={handleStart}
-              disabled={emailTouched && !isEmailValid}
+              disabled={(emailTouched && !isEmailValid) || (phoneTouched && !isPhoneValid)}
             >
               <span>Begin Your Reading ✦</span>
             </button>
@@ -691,7 +758,7 @@ function CareerOracleTool({ language }: { language: string }) {
                   Your trait profile is free to view above. To see which
                   professions match it, plus your AI Growth Path and a
                   downloadable PDF report, unlock the full report for a
-                  one-time $4.99 — tied to this test attempt.
+                  one-time {priceLabel} — tied to this test attempt.
                 </p>
                 {unlockError && (
                   <p className="text-[11px] text-red-400 mb-4">{unlockError}</p>
@@ -701,7 +768,7 @@ function CareerOracleTool({ language }: { language: string }) {
                   onClick={handleUnlock}
                   disabled={checkoutLoading}
                 >
-                  <span>{checkoutLoading ? "Redirecting…" : "Unlock Full Report — $4.99 →"}</span>
+                  <span>{checkoutLoading ? "Redirecting…" : `Unlock Full Report — ${priceLabel} →`}</span>
                 </button>
                 <p className="text-[9px] tracking-widest text-[var(--mist)] uppercase mt-4">
                   Receipt sent to {sessionStorage.getItem("co_email") || email}
@@ -1123,10 +1190,10 @@ function CareerOracleTool({ language }: { language: string }) {
                     disabled={checkoutLoading}
                     onClick={handleUnlock}
                   >
-                    <span>{checkoutLoading ? "Redirecting to checkout..." : "Unlock Full Report — $4.99 →"}</span>
+                    <span>{checkoutLoading ? "Redirecting to checkout..." : `Unlock Full Report — ${priceLabel} →`}</span>
                   </button>
                   <p className="text-[9px] text-[var(--mist)] mt-4 uppercase tracking-widest">
-                    Secure checkout via Stripe · Cards & international payments supported
+                    Secure checkout via Cashfree · UPI, cards & netbanking supported
                   </p>
                 </div>
               ) : growthError ? (
@@ -1368,7 +1435,7 @@ function CareerOracleTool({ language }: { language: string }) {
                     ? "Redirecting to checkout..."
                     : unlocked
                       ? "Download Report ↓"
-                      : "Unlock & Download Report — $4.99 →"}
+                      : `Unlock & Download Report — ${priceLabel} →`}
                 </span>
               </button>
               <button
