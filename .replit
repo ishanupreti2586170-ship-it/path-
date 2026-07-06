@@ -61,3 +61,8 @@ timeoutMs = 120000
 CASHFREE_ENV = "production"
 FULL_REPORT_PRICE_INR = "399"
 BYPASS_EMAIL = "joship696@gmail.com"
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "NODE_ENV=production node dist/server.cjs"]
+build = ["npm", "run", "build"]
