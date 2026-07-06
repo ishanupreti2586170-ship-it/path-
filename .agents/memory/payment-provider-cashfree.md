@@ -22,3 +22,11 @@ to see the live mode ("sandbox" | "production") and confirm which provider's cli
 If the mode is "production", a test card won't work — treat live-payment testing as
 requiring explicit user sign-off (sandbox credentials or a real charge), not something
 to trigger unprompted.
+
+Cashfree's `PGCreateOrder` accepts `order_meta.payment_methods` (comma-separated: `upi`,
+`nb`, `cc`, `dc`, etc.) to force which rails the hosted checkout page offers, instead of
+relying on whatever's toggled in the merchant dashboard. Stripe-specific concepts like
+chequebook-based bank verification or RBI PAN collection for cross-border LRS card
+charges don't apply here — this is a single-currency (INR), domestic-only checkout.
+Creating a real order via `PGCreateOrder` against production is safe for verification
+(no money moves until the customer completes payment on the hosted page).

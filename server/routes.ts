@@ -141,6 +141,12 @@ router.post("/checkout", async (req, res) => {
         // Cashfree substitutes {order_id} and redirects the browser here after
         // the payment attempt. We land back on the app and confirm status.
         return_url: `${baseUrl}/app?cashfree=1&order_id={order_id}`,
+        // Explicitly request India's standard payment rails so the checkout
+        // page always offers them regardless of dashboard defaults: UPI
+        // (incl. UPI intent apps), netbanking, and debit/credit cards. None
+        // of these require a chequebook -- that's only relevant to manual
+        // NEFT/RTGS bank-transfer verification, which we don't use.
+        payment_methods: "upi,nb,cc,dc",
       },
     });
 
