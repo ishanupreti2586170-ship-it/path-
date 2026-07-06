@@ -1,1 +1,2 @@
 - [SEO meta for the Vite SPA + Express](seo-spa-meta.md) — per-route tags via server injection + Helmet; static twins in index.html need data-rh="true" or you get duplicate canonical/OG.
+- [Payment provider is Cashfree, not Stripe](payment-provider-cashfree.md) — Stripe deps are unused leftovers; verify /api/payment-config mode before assuming sandbox test cards will work.
