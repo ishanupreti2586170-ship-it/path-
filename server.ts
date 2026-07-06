@@ -125,6 +125,14 @@ async function startServer() {
     // inject per-route SEO meta tags.
     app.use(express.static(distPath, { index: false }));
     app.get("*", (req, res) => {
+      // Normalize trailing slashes (except root) so "/about-us/" matches "/about-us".
+      const routePath =
+        req.path.length > 1 ? req.path.replace(/\/+$/, "") || "/" : req.path;
+      // Only the real routes should return 200. Unknown paths still serve the
+      // SPA shell (so the client router can render a not-found screen) but with
+      // a proper 404 status to avoid Google flagging them as soft 404s.
+      const status = ROUTE_META[routePath] ? 200 : 404;
+      res.status(status);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.send(injectMeta(template, req.path));
     });
