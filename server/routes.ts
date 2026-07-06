@@ -46,7 +46,7 @@ function isRateLimited(key: string): boolean {
 
 // Builds the "receipt" summary shown in the confirmation banner from
 // Cashfree's payment records for an order. Cashfree doesn't provide a hosted
-// receipt URL the way Stripe does, so instead we surface the payment facts
+// receipt URL, so instead we surface the payment facts
 // (amount, method, time, Cashfree's own payment id) directly in the UI.
 async function getReceiptForOrder(orderId: string) {
   const cashfree = getCashfreeClient();
@@ -168,7 +168,7 @@ router.post("/checkout", async (req, res) => {
 // order_id is the caller's own private per-attempt UUID, so it doubles as the
 // ownership token. When unlocked, also returns a "receipt" summary (amount,
 // method, time) built from Cashfree's own payment records -- Cashfree has no
-// hosted receipt link like Stripe's, so this in-app summary is the receipt.
+// hosted receipt link, so this in-app summary is the receipt.
 router.get("/purchase-status", async (req, res) => {
   try {
     const testSessionId = req.query.testSessionId;

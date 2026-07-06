@@ -60,7 +60,7 @@ interface GrowthSuggestions {
   resources: { name: string; type: string; why: string }[];
 }
 
-// Cashfree has no hosted receipt link like Stripe's, so this is the "receipt"
+// Cashfree has no hosted receipt link, so this is the "receipt"
 // we build in-app from Cashfree's own payment record for the order.
 interface PurchaseReceipt {
   orderId: string;
