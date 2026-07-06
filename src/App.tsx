@@ -108,6 +108,11 @@ function CareerOracleTool({ language }: { language: string }) {
   const [cashfreeMode, setCashfreeMode] = useState<"sandbox" | "production">("sandbox");
   const [justUnlocked, setJustUnlocked] = useState(false);
   const [receipt, setReceipt] = useState<PurchaseReceipt | null>(null);
+  // True when the report is unlocked but we couldn't fetch the receipt details
+  // even after retrying -- Cashfree's payment records can lag behind the order
+  // status, so we show a clear "still syncing / check your email" fallback
+  // instead of silently omitting the receipt line.
+  const [receiptPending, setReceiptPending] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
   const [restoreCode, setRestoreCode] = useState("");
   const [restoreLoading, setRestoreLoading] = useState(false);
@@ -151,22 +156,27 @@ function CareerOracleTool({ language }: { language: string }) {
   // paywall. A non-ok server response (transient error) leaves state untouched.
   // Returns the receipt (if any) alongside the unlock check so callers can
   // populate the confirmation banner without a second round-trip.
-  const confirmPurchase = async () => {
+  const confirmPurchase = async (): Promise<{ unlocked: boolean; receipt: PurchaseReceipt | null }> => {
     const savedEmail = (sessionStorage.getItem("co_email") || email).trim();
     const resp = await fetch(
       `/api/purchase-status?testSessionId=${encodeURIComponent(getTestSessionId())}&email=${encodeURIComponent(savedEmail)}`,
     );
     const data = await resp.json();
-    if (!resp.ok) return false;
+    if (!resp.ok) return { unlocked: false, receipt: null };
     if (data.unlocked) {
       sessionStorage.setItem("co_unlocked", "1");
       setUnlocked(true);
-      setReceipt(data.receipt ?? null);
-      return true;
+      const rc = (data.receipt as PurchaseReceipt) ?? null;
+      // The server is the source of truth for the current attempt, so reflect
+      // exactly what it returned (including null). handleStart clears receipt
+      // state at attempt boundaries, so this can't leak a stale receipt from a
+      // previous order into a new one.
+      setReceipt(rc);
+      return { unlocked: true, receipt: rc };
     }
     sessionStorage.removeItem("co_unlocked");
     setUnlocked(false);
-    return false;
+    return { unlocked: false, receipt: null };
   };
 
   useEffect(() => {
@@ -178,10 +188,29 @@ function CareerOracleTool({ language }: { language: string }) {
     if (!sessionStorage.getItem("co_test_session_id")) return;
     (async () => {
       try {
-        const ok = await confirmPurchase();
+        const result = await confirmPurchase();
         if (isReturn) {
-          if (ok) {
+          if (result.unlocked) {
             setJustUnlocked(true);
+            // The order is PAID but Cashfree's payment records (which back the
+            // receipt) can settle a moment behind the order status. Rather than
+            // showing no receipt, re-poll a few times with backoff before
+            // falling back to the "still syncing / check your email" message.
+            if (!result.receipt) {
+              setReceiptPending(false);
+              const backoffMs = [1500, 3000, 5000];
+              let found = false;
+              for (const delay of backoffMs) {
+                await new Promise((r) => setTimeout(r, delay));
+                const retry = await confirmPurchase();
+                if (retry.receipt) {
+                  found = true;
+                  break;
+                }
+                if (!retry.unlocked) break;
+              }
+              if (!found) setReceiptPending(true);
+            }
           } else {
             setUnlockError(
               "We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.",
@@ -297,6 +326,11 @@ function CareerOracleTool({ language }: { language: string }) {
     sessionStorage.removeItem("co_unlocked");
     setUnlocked(false);
     setUnlockError("");
+    // Clear any receipt/confirmation state from a prior attempt so this fresh
+    // attempt can never display a stale receipt or "unlocked" banner.
+    setReceipt(null);
+    setReceiptPending(false);
+    setJustUnlocked(false);
     setScreen("question");
     setStep(0);
   };
@@ -1223,7 +1257,9 @@ function CareerOracleTool({ language }: { language: string }) {
                   <p className="text-[10px] text-[var(--mist)]">
                     {receipt
                       ? `₹${receipt.amount ?? priceInr} via ${receipt.method ?? "Cashfree"}${receipt.completedAt ? " · " + new Date(receipt.completedAt).toLocaleDateString() : ""}`
-                      : "Your payment has been confirmed."}
+                      : receiptPending
+                        ? "Payment confirmed — your receipt details are still syncing. A payment confirmation has also been sent to your email."
+                        : "Your payment has been confirmed."}
                   </p>
                   <p className="text-[9px] text-[var(--mist)] mt-1">
                     Confirmation code: <span className="text-[var(--gold-d)]">{getTestSessionId()}</span> — save this to restore access on another device.
@@ -1542,7 +1578,9 @@ function CareerOracleTool({ language }: { language: string }) {
                   <p className="text-[10px] text-[var(--mist)] mb-3">
                     {receipt
                       ? `₹${receipt.amount ?? priceInr} via ${receipt.method ?? "Cashfree"}${receipt.completedAt ? " · " + new Date(receipt.completedAt).toLocaleDateString() : ""}`
-                      : "Your payment has been confirmed."}
+                      : receiptPending
+                        ? "Payment confirmed — your receipt details are still syncing. A payment confirmation has also been sent to your email."
+                        : "Your payment has been confirmed."}
                   </p>
                   <p className="text-[9px] text-[var(--mist)]">
                     Confirmation code: <span className="text-[var(--gold-d)]">{getTestSessionId()}</span> — save this to restore access on another device.
