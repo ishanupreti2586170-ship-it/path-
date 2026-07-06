@@ -60,6 +60,17 @@ interface GrowthSuggestions {
   resources: { name: string; type: string; why: string }[];
 }
 
+// Cashfree has no hosted receipt link like Stripe's, so this is the "receipt"
+// we build in-app from Cashfree's own payment record for the order.
+interface PurchaseReceipt {
+  orderId: string;
+  cfPaymentId: string | number | null;
+  amount: number | null;
+  currency: string | null;
+  method: string | null;
+  completedAt: string | null;
+}
+
 function CareerOracleTool({ language }: { language: string }) {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [step, setStep] = useState(0);
@@ -95,6 +106,13 @@ function CareerOracleTool({ language }: { language: string }) {
   const [emailTouched, setEmailTouched] = useState(false);
   const [priceInr, setPriceInr] = useState(399);
   const [cashfreeMode, setCashfreeMode] = useState<"sandbox" | "production">("sandbox");
+  const [justUnlocked, setJustUnlocked] = useState(false);
+  const [receipt, setReceipt] = useState<PurchaseReceipt | null>(null);
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoreCode, setRestoreCode] = useState("");
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreSuccess, setRestoreSuccess] = useState(false);
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = EMAIL_RE.test(email.trim());
@@ -131,6 +149,8 @@ function CareerOracleTool({ language }: { language: string }) {
   // avoid a flash on reload -- it is never trusted on its own, and a definitive
   // "not paid" from the server clears it so a forged flag can't bypass the
   // paywall. A non-ok server response (transient error) leaves state untouched.
+  // Returns the receipt (if any) alongside the unlock check so callers can
+  // populate the confirmation banner without a second round-trip.
   const confirmPurchase = async () => {
     const savedEmail = (sessionStorage.getItem("co_email") || email).trim();
     const resp = await fetch(
@@ -141,6 +161,7 @@ function CareerOracleTool({ language }: { language: string }) {
     if (data.unlocked) {
       sessionStorage.setItem("co_unlocked", "1");
       setUnlocked(true);
+      setReceipt(data.receipt ?? null);
       return true;
     }
     sessionStorage.removeItem("co_unlocked");
@@ -158,10 +179,14 @@ function CareerOracleTool({ language }: { language: string }) {
     (async () => {
       try {
         const ok = await confirmPurchase();
-        if (isReturn && !ok) {
-          setUnlockError(
-            "We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.",
-          );
+        if (isReturn) {
+          if (ok) {
+            setJustUnlocked(true);
+          } else {
+            setUnlockError(
+              "We couldn't confirm your payment yet. If you were charged, this should update shortly — try refreshing.",
+            );
+          }
         }
       } catch (e) {
         console.error(e);
@@ -175,6 +200,37 @@ function CareerOracleTool({ language }: { language: string }) {
       }
     })();
   }, []);
+
+  const handleRestorePurchase = async () => {
+    setRestoreLoading(true);
+    setRestoreError("");
+    setRestoreSuccess(false);
+    try {
+      const resp = await fetch("/api/restore-purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testSessionId: restoreCode.trim() }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.unlocked || !data.testSessionId) {
+        throw new Error(data.error || "No paid purchase found for that confirmation code.");
+      }
+      // Adopt the restored testSessionId as this browser's active attempt so
+      // /api/purchase-status and the checkout flow all key off it going
+      // forward -- this is what makes the unlock "stick" on the new device.
+      sessionStorage.setItem("co_test_session_id", data.testSessionId);
+      sessionStorage.setItem("co_unlocked", "1");
+      setUnlocked(true);
+      setReceipt(data.receipt ?? null);
+      setRestoreSuccess(true);
+      setUnlockError("");
+    } catch (e: any) {
+      console.error(e);
+      setRestoreError(e.message || "No paid purchase found for that confirmation code.");
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
 
   const handleUnlock = async () => {
     setCheckoutLoading(true);
@@ -1158,6 +1214,32 @@ function CareerOracleTool({ language }: { language: string }) {
               These suggestions are AI-generated — the match above is not
             </p>
 
+            {unlocked && justUnlocked && (
+              <div className="glass w-full mb-6 px-5 py-4 border border-[rgba(147,211,250,0.3)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-cg text-[var(--star)] mb-1">
+                    ✓ Payment received — Full Report Unlocked
+                  </p>
+                  <p className="text-[10px] text-[var(--mist)]">
+                    {receipt
+                      ? `₹${receipt.amount ?? priceInr} via ${receipt.method ?? "Cashfree"}${receipt.completedAt ? " · " + new Date(receipt.completedAt).toLocaleDateString() : ""}`
+                      : "Your payment has been confirmed."}
+                  </p>
+                  <p className="text-[9px] text-[var(--mist)] mt-1">
+                    Confirmation code: <span className="text-[var(--gold-d)]">{getTestSessionId()}</span> — save this to restore access on another device.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    className="text-[10px] tracking-widest uppercase text-[var(--mist)] hover:text-[var(--gold)] transition-colors"
+                    onClick={() => setJustUnlocked(false)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="card w-full">
               {!unlocked ? (
                 <div className="text-center py-8">
@@ -1183,6 +1265,44 @@ function CareerOracleTool({ language }: { language: string }) {
                   <p className="text-[9px] text-[var(--mist)] mt-4 uppercase tracking-widest">
                     Secure checkout via Cashfree · UPI, cards & netbanking supported
                   </p>
+                  <button
+                    type="button"
+                    className="block mx-auto mt-4 text-[9px] text-[var(--mist)] hover:text-[var(--gold-d)] underline underline-offset-2 tracking-widest uppercase"
+                    onClick={() => setShowRestore((s) => !s)}
+                  >
+                    Already paid? Restore access
+                  </button>
+                  {showRestore && (
+                    <div className="max-w-xs mx-auto mt-4 text-left">
+                      <p className="text-[10px] text-[var(--mist)] mb-2">
+                        Enter the confirmation code shown after your last payment to restore access on this device.
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={restoreCode}
+                          onChange={(e) => setRestoreCode(e.target.value)}
+                          placeholder="Confirmation code"
+                          className="flex-1 bg-[rgba(255,255,255,0.04)] border border-[rgba(201,168,76,0.2)] rounded-full px-3 py-2 text-xs text-[var(--star)] placeholder:text-[rgba(240,234,255,0.3)] focus:outline-none focus:border-[var(--gold)]"
+                        />
+                        <button
+                          className="btn btn-ghost !py-2 !px-4 text-xs"
+                          disabled={restoreLoading || !restoreCode.trim()}
+                          onClick={handleRestorePurchase}
+                        >
+                          <span>{restoreLoading ? "Checking..." : "Restore"}</span>
+                        </button>
+                      </div>
+                      {restoreError && (
+                        <p className="text-[10px] text-[#e87b9a] mt-2">{restoreError}</p>
+                      )}
+                      {restoreSuccess && (
+                        <p className="text-[10px] text-[var(--gold-d)] mt-2">
+                          Access restored — your full report is now unlocked.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : growthError ? (
                 <p className="text-sm text-[rgba(240,234,255,0.6)] leading-relaxed text-center py-6">
@@ -1414,6 +1534,21 @@ function CareerOracleTool({ language }: { language: string }) {
             </div>
 
             <div className="flex flex-col items-center gap-6 mt-4">
+              {unlocked && justUnlocked && (
+                <div className="glass w-full max-w-md px-5 py-4 border border-[rgba(147,211,250,0.3)] text-center">
+                  <p className="text-sm font-cg text-[var(--star)] mb-1">
+                    ✓ Payment received — Full Report Unlocked
+                  </p>
+                  <p className="text-[10px] text-[var(--mist)] mb-3">
+                    {receipt
+                      ? `₹${receipt.amount ?? priceInr} via ${receipt.method ?? "Cashfree"}${receipt.completedAt ? " · " + new Date(receipt.completedAt).toLocaleDateString() : ""}`
+                      : "Your payment has been confirmed."}
+                  </p>
+                  <p className="text-[9px] text-[var(--mist)]">
+                    Confirmation code: <span className="text-[var(--gold-d)]">{getTestSessionId()}</span> — save this to restore access on another device.
+                  </p>
+                </div>
+              )}
               {!unlocked && unlockError && (
                 <p className="text-xs text-[#e87b9a] max-w-md text-center">{unlockError}</p>
               )}
@@ -1426,6 +1561,46 @@ function CareerOracleTool({ language }: { language: string }) {
                       : `Unlock & Download Report — ${priceLabel} →`}
                 </span>
               </button>
+              {!unlocked && (
+                <button
+                  type="button"
+                  className="text-[9px] text-[var(--mist)] hover:text-[var(--gold-d)] underline underline-offset-2 tracking-widest uppercase -mt-3"
+                  onClick={() => setShowRestore((s) => !s)}
+                >
+                  Already paid? Restore access
+                </button>
+              )}
+              {!unlocked && showRestore && (
+                <div className="max-w-xs w-full text-left -mt-2">
+                  <p className="text-[10px] text-[var(--mist)] mb-2 text-center">
+                    Enter the confirmation code shown after your last payment to restore access on this device.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={restoreCode}
+                      onChange={(e) => setRestoreCode(e.target.value)}
+                      placeholder="Confirmation code"
+                      className="flex-1 bg-[rgba(255,255,255,0.04)] border border-[rgba(201,168,76,0.2)] rounded-full px-3 py-2 text-xs text-[var(--star)] placeholder:text-[rgba(240,234,255,0.3)] focus:outline-none focus:border-[var(--gold)]"
+                    />
+                    <button
+                      className="btn btn-ghost !py-2 !px-4 text-xs"
+                      disabled={restoreLoading || !restoreCode.trim()}
+                      onClick={handleRestorePurchase}
+                    >
+                      <span>{restoreLoading ? "Checking..." : "Restore"}</span>
+                    </button>
+                  </div>
+                  {restoreError && (
+                    <p className="text-[10px] text-[#e87b9a] mt-2 text-center">{restoreError}</p>
+                  )}
+                  {restoreSuccess && (
+                    <p className="text-[10px] text-[var(--gold-d)] mt-2 text-center">
+                      Access restored — your full report is now unlocked.
+                    </p>
+                  )}
+                </div>
+              )}
               <button
                 className="text-[var(--gold-d)] tracking-[0.3em] uppercase text-[10px] hover:text-[var(--gold)] transition-colors"
                 onClick={() => {

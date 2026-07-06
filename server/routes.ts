@@ -25,6 +25,50 @@ function isBypassEmail(email: string): boolean {
   return configured.length > 0 && configured.includes(email.trim().toLowerCase());
 }
 
+// Rate limiting for the restore-by-order-id endpoint -- someone brute-forcing
+// random order IDs shouldn't be able to hammer the Cashfree API through us.
+// In-memory is fine here: this is a coarse abuse guard, not a security
+// boundary, and resets on redeploy are an acceptable tradeoff.
+const RESTORE_WINDOW_MS = 15 * 60 * 1000;
+const RESTORE_MAX_ATTEMPTS = 10;
+const restoreAttempts = new Map<string, { count: number; windowStart: number }>();
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const entry = restoreAttempts.get(key);
+  if (!entry || now - entry.windowStart > RESTORE_WINDOW_MS) {
+    restoreAttempts.set(key, { count: 1, windowStart: now });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > RESTORE_MAX_ATTEMPTS;
+}
+
+// Builds the "receipt" summary shown in the confirmation banner from
+// Cashfree's payment records for an order. Cashfree doesn't provide a hosted
+// receipt URL the way Stripe does, so instead we surface the payment facts
+// (amount, method, time, Cashfree's own payment id) directly in the UI.
+async function getReceiptForOrder(orderId: string) {
+  const cashfree = getCashfreeClient();
+  const payments = await cashfree.PGOrderFetchPayments(orderId);
+  const successful = (payments.data || [])
+    .filter((p) => p.payment_status === "SUCCESS")
+    .sort((a, b) => {
+      const at = a.payment_completion_time ? Date.parse(a.payment_completion_time) : 0;
+      const bt = b.payment_completion_time ? Date.parse(b.payment_completion_time) : 0;
+      return bt - at;
+    })[0];
+  if (!successful) return null;
+  return {
+    orderId,
+    cfPaymentId: successful.cf_payment_id ?? null,
+    amount: successful.payment_amount ?? null,
+    currency: successful.payment_currency ?? null,
+    method: successful.payment_group ?? null,
+    completedAt: successful.payment_completion_time ?? null,
+  };
+}
+
 // Expose the current payment config the frontend needs: the price to show and
 // which Cashfree mode ("sandbox" | "production") the checkout SDK must load.
 router.get("/payment-config", (_req, res) => {
@@ -116,7 +160,9 @@ router.post("/checkout", async (req, res) => {
 // order (order_id === testSessionId) and checking the order status. Used both
 // right after the redirect back from Cashfree and on later re-checks. The
 // order_id is the caller's own private per-attempt UUID, so it doubles as the
-// ownership token.
+// ownership token. When unlocked, also returns a "receipt" summary (amount,
+// method, time) built from Cashfree's own payment records -- Cashfree has no
+// hosted receipt link like Stripe's, so this in-app summary is the receipt.
 router.get("/purchase-status", async (req, res) => {
   try {
     const testSessionId = req.query.testSessionId;
@@ -126,20 +172,79 @@ router.get("/purchase-status", async (req, res) => {
     const email = typeof req.query.email === "string" ? req.query.email : "";
     // Secret email stays unlocked across reloads without any Cashfree order.
     if (isBypassEmail(email)) {
-      return res.json({ unlocked: true });
+      return res.json({ unlocked: true, receipt: null });
     }
     const cashfree = getCashfreeClient();
     const response = await cashfree.PGFetchOrder(testSessionId);
     const unlocked = response.data?.order_status === "PAID";
-    res.json({ unlocked });
+
+    let receipt = null;
+    if (unlocked) {
+      try {
+        receipt = await getReceiptForOrder(testSessionId);
+      } catch (e) {
+        console.error("Receipt lookup error:", e);
+      }
+    }
+
+    res.json({ unlocked, receipt });
   } catch (error: any) {
     // A not-yet-created / unknown order just means "not paid", not an error.
     if (error?.response?.status === 404) {
-      return res.json({ unlocked: false });
+      return res.json({ unlocked: false, receipt: null });
     }
     const detail = error?.response?.data?.message || error?.message;
     console.error("Cashfree purchase status error:", error?.response?.data || error);
     res.status(500).json({ error: detail || "Failed to check purchase status" });
+  }
+});
+
+// Restores access on a new device/browser. There are no accounts, so the
+// order ID (== the testSessionId shown to the user as their "confirmation
+// code" once unlocked) is the ownership proof -- it's verified live against
+// Cashfree, exactly like the original per-attempt purchase check, just
+// callable from a browser that never had that testSessionId in its own
+// sessionStorage. Rate-limited per IP since this is effectively a lookup
+// endpoint for an unauthenticated identifier.
+router.post("/restore-purchase", async (req, res) => {
+  try {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (isRateLimited(`restore:${ip}`)) {
+      return res.status(429).json({ error: "Too many attempts. Please try again later." });
+    }
+
+    const { testSessionId } = req.body || {};
+    if (!testSessionId || typeof testSessionId !== "string") {
+      return res.status(400).json({ error: "Your confirmation code is required." });
+    }
+
+    const cashfree = getCashfreeClient();
+    let order;
+    try {
+      order = await cashfree.PGFetchOrder(testSessionId);
+    } catch (fetchErr: any) {
+      if (fetchErr?.response?.status === 404) {
+        return res.status(404).json({ error: "No purchase found for that confirmation code." });
+      }
+      throw fetchErr;
+    }
+
+    if (order.data?.order_status !== "PAID") {
+      return res.status(404).json({ error: "No paid purchase found for that confirmation code." });
+    }
+
+    let receipt = null;
+    try {
+      receipt = await getReceiptForOrder(testSessionId);
+    } catch (e) {
+      console.error("Receipt lookup error:", e);
+    }
+
+    res.json({ testSessionId, unlocked: true, receipt });
+  } catch (error: any) {
+    const detail = error?.response?.data?.message || error?.message;
+    console.error("Restore purchase error:", error?.response?.data || error);
+    res.status(500).json({ error: detail || "Failed to restore purchase" });
   }
 });
 
