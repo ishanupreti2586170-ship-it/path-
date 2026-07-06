@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ais-pre-6i7swtbtjdtxsyzjiehmqk-596582934926.asia-east1.run.app/sitemap.xml
+Sitemap: https://truepathcareer.com/sitemap.xml

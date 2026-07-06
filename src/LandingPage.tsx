@@ -1,9 +1,51 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
+import { Seo, SITE_URL, DEFAULT_OG_IMAGE } from "./Seo";
+
+const HOME_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#org`,
+      name: "The Career Oracle",
+      url: `${SITE_URL}/`,
+      logo: DEFAULT_OG_IMAGE,
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: `${SITE_URL}/`,
+      name: "The Career Oracle",
+      publisher: { "@id": `${SITE_URL}/#org` },
+    },
+    {
+      "@type": "WebApplication",
+      name: "The Career Oracle",
+      url: `${SITE_URL}/app`,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      description:
+        "A science-backed career discovery test using the Big Five, Holland Code (RIASEC), and cognitive style, matched to real occupations with transparent, deterministic scoring.",
+      offers: {
+        "@type": "Offer",
+        price: "399",
+        priceCurrency: "INR",
+        description: "Full career report unlock",
+      },
+    },
+  ],
+};
 
 export function LandingPage() {
   return (
     <div className="w-full max-w-[900px] px-6 mx-auto pt-20 pb-32 text-center text-[var(--star)] relative z-10" style={{fontFamily: "'DM Mono', monospace"}}>
+      <Seo
+        title="The Career Oracle — Free Psychometric Career Test & Path Finder"
+        description="Discover your ideal career with The Career Oracle: a science-backed career test using the Big Five, Holland Code (RIASEC), and cognitive style. Matched to real occupations with transparent, deterministic scoring — no AI guessing."
+        path="/"
+        jsonLd={HOME_JSON_LD}
+      />
       
       <motion.div
         initial={{ opacity: 0, y: 20 }}

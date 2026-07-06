@@ -17,6 +17,7 @@ import {
 import { Helmet } from "react-helmet-async";
 import { load } from "@cashfreepayments/cashfree-js";
 import { LandingPage } from "./LandingPage";
+import { Seo, DEFAULT_OG_IMAGE } from "./Seo";
 import { ASSESSMENT_BLOCKS, LikertBlock, ChoiceBlock } from "./data/assessmentItems";
 import {
   computeTraitProfile,
@@ -376,6 +377,11 @@ function CareerOracleTool({ language }: { language: string }) {
 
   return (
     <div className="app w-full max-w-[720px] px-4 pb-20 relative z-10 pt-10">
+      <Seo
+        title="Take the Career Test — The Career Oracle"
+        description="Answer a short psychometric assessment and get matched to real careers using validated psychology and transparent, deterministic scoring. No AI guessing in the diagnostic."
+        path="/app"
+      />
       <AnimatePresence mode="wait">
         {screen === "welcome" && (
           <motion.div
@@ -1452,13 +1458,11 @@ function CareerOracleTool({ language }: { language: string }) {
 function AboutUs() {
   return (
     <div className="pt-20 flex flex-col items-center text-center app w-full max-w-[720px] px-4 pb-20 relative z-10">
-      <Helmet>
-        <title>About Career Oracle - Find Your Career Path</title>
-        <meta
-          name="description"
-          content="Discover how to find your career path with Career Oracle. The ultimate quiz and AI tool to find compatible jobs, explore career exploration for students, and help you find a career path that matches your interests."
-        />
-      </Helmet>
+      <Seo
+        title="About & Disclaimer — The Career Oracle"
+        description="How The Career Oracle works: Big Five personality, Holland Code (RIASEC) interests, cognitive style, and deterministic career matching — plus an honest disclaimer."
+        path="/about-us"
+      />
       <div className="seal relative w-16 h-16 mb-8 flex items-center justify-center">
         <div className="absolute inset-0 border border-[rgba(201,168,76,0.3)] rounded-full" />
         <span className="text-xl text-[var(--gold)]">ℹ</span>
@@ -1643,13 +1647,11 @@ function AboutUs() {
 function PrivacyPolicy() {
   return (
     <div className="pt-20 flex flex-col items-center text-center app w-full max-w-[720px] px-4 pb-20 relative z-10">
-      <Helmet>
-        <title>Privacy Policy - Career Oracle</title>
-        <meta
-          name="description"
-          content="Privacy Policy for Career Oracle. Learn how we handle your data when you use our career prediction AI."
-        />
-      </Helmet>
+      <Seo
+        title="Privacy Policy — The Career Oracle"
+        description="How The Career Oracle collects, uses, and protects your data, including third-party services used for payments and AI growth suggestions."
+        path="/privacy-policy"
+      />
       <h1 className="display text-4xl mb-6">Privacy Policy</h1>
       <div className="card text-left mb-8 max-w-3xl text-sm text-[rgba(240,234,255,0.7)] space-y-4">
         <p>Last updated: June 2026</p>
@@ -1684,13 +1686,11 @@ function PrivacyPolicy() {
 function TermsOfService() {
   return (
     <div className="pt-20 flex flex-col items-center text-center app w-full max-w-[720px] px-4 pb-20 relative z-10">
-      <Helmet>
-        <title>Terms of Service - Career Oracle</title>
-        <meta
-          name="description"
-          content="Terms of Service for Career Oracle. Read the conditions before exploring your career path."
-        />
-      </Helmet>
+      <Seo
+        title="Terms of Service — The Career Oracle"
+        description="The terms and conditions for using The Career Oracle career assessment, including disclaimers and limitations of liability."
+        path="/terms-of-service"
+      />
       <h1 className="display text-4xl mb-6">Terms of Service</h1>
       <div className="card text-left mb-8 max-w-3xl text-sm text-[rgba(240,234,255,0.7)] space-y-4">
         <p>
@@ -1768,11 +1768,14 @@ export default function App() {
   return (
     <div className="relative min-h-screen z-10 w-full overflow-x-hidden flex flex-col items-center">
       <Helmet>
-        <title>Career Oracle - How to find your career path</title>
+        <title>The Career Oracle — Free Psychometric Career Test & Path Finder</title>
         <meta
           name="description"
-          content="Take this test to find career path and discover what you are good at. Find compatible jobs for you."
+          content="Discover your ideal career with The Career Oracle: a science-backed career test using the Big Five, Holland Code (RIASEC), and cognitive style. Matched to real occupations with transparent, deterministic scoring."
         />
+        <meta property="og:image" content={DEFAULT_OG_IMAGE} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content={DEFAULT_OG_IMAGE} />
       </Helmet>
       <canvas
         ref={canvasRef}
